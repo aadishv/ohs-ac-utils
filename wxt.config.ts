@@ -2,7 +2,7 @@ import { defineConfig } from 'wxt';
 
 export default defineConfig({
   manifest: {
-    name: 'Video Fetch Copier',
+    name: 'OHS AC Utilities',
     version: '0.1.0',
     description: 'Copies video.mp4 requests as fetch commands.',
     permissions: [
@@ -15,5 +15,5 @@ export default defineConfig({
     ]
     // WXT automatically detects entrypoints, but you can be explicit if needed.
     // Action (popup) is usually defined by having a popup/index.html entrypoint.
-  },
+  },  modules: ['@wxt-dev/auto-icons']
 });

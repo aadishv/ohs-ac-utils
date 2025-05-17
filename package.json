@@ -15,7 +15,9 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
+    "@adobe/react-spectrum": "^3.41.0",
     "@tailwindcss/vite": "^4.1.6",
+    "@wxt-dev/auto-icons": "^1.0.2",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.3",
     "react": "^19.1.0",
