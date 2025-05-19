@@ -1,4 +1,4 @@
-import { ResultAsync } from 'neverthrow'
+import { errAsync, ResultAsync } from 'neverthrow'
 /**
  * Helper to trim any leading/trailing "%22" (encoded `"` quotes) from the URL.
  */
@@ -89,4 +89,33 @@ export function useVideo(): ResultAsync<string, string> {
   return getVideoUrl()
     .andThen(fetchVideoBlob)
     .map((blob) => URL.createObjectURL(blob))
+}
+
+// MARK: - downloading utilities
+
+export async function downloadBlobFromUrl(blobUrl: string): Promise<void> {
+  try {
+    // Get the active tab's title for the filename
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    const title = tabs[0]?.title?.trim() || "video";
+    const filename = `${title}.mp4`;
+
+    // Fetch the blob
+    const response = await fetch(blobUrl);
+    if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
+    const blob = await response.blob();
+
+    // Create a download link and trigger it
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error("Failed to download blob:", error);
+    // Optionally, display an error message to the user here
+  }
 }
