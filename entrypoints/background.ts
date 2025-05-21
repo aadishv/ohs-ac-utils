@@ -6,7 +6,8 @@ let lastVideoRequestTimestamp: number | null = null;
 
 export default defineBackground(() => {
   console.log("Background script initialized.");
-
+  console.log('9')
+  console.log('16');
   browser.webRequest.onSendHeaders.addListener(
     (details) => {
       if (details.url.includes("video.mp4")) {

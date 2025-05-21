@@ -47,7 +47,7 @@ function getVideoUrl(): ResultAsync<string, string> {
  * Step 2: download the video as a blob.
  * Returns ResultAsync< Blob, errorMessage >
  */
-function fetchVideoBlob(videoUrl: string): ResultAsync<Blob, string> {
+export function fetchVideoBlob(videoUrl: string): ResultAsync<Blob, string> {
   return ResultAsync.fromPromise(
     (async () => {
       const cleanUrl = trimEncodedQuotes(videoUrl)

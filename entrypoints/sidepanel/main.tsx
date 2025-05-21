@@ -7,7 +7,7 @@ import {
   ProgressCircle,
   Provider,
 } from "@adobe/react-spectrum";
-import { useVideo, downloadBlobFromUrl } from "./data";
+import { useVideo, downloadBlobFromUrl } from "../popup/data";
 
 type VideoState =
   | { status: "idle" }
@@ -39,23 +39,11 @@ export function VideoPlayer() {
       },
     );
   };
-  const openSidePanel = () => {
-    browser.windows.getCurrent().then((win) => {
-      browser.sidePanel
-        .open({
-          windowId: win.id!,
-        })
-        .catch((err) => console.error(err));
-    });
-  };
   if (state.status === "idle") {
     return (
       <div style={{display: "flex", flexDirection: "column", gap: "1rem"}}>
       <Button variant="accent" onPress={handleLoadVideo}>
         Load Video
-      </Button>
-        <Button variant="secondary" onPress={openSidePanel}>
-        Open side panel
       </Button>
       </div>
     );
@@ -85,7 +73,7 @@ const rootElement = document.getElementById("root");
 if (rootElement) {
   createRoot(rootElement).render(
     <Provider theme={defaultTheme}>
-      <div style={{padding: "1rem"}}>
+      <div style={{padding: "1rem", height: "100vh"}}>
         <VideoPlayer />
       </div>
     </Provider>,
