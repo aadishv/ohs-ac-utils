@@ -55,14 +55,14 @@ export function VideoPlayer() {
         Load Video
       </Button>
         <Button variant="secondary" onPress={openSidePanel}>
-        Open side panel
+        Open AI Panel
       </Button>
       </div>
     );
   }
 
-  if (state.status === "loading") return <div>Loading…</div>;
-  if (state.status === "error") return <div>Error: {state.error}</div>;
+  if (state.status === "loading") return <div style={{paddingTop: "auto", paddingBottom: "auto"}}>Loading…</div>;
+  if (state.status === "error") return <div style={{paddingTop: "auto", paddingBottom: "auto"}}>Error: {state.error}</div>;
   if (state.status === "success")
     return (
       <div>

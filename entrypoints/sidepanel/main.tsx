@@ -1,24 +1,39 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  Badge,
   Button,
   ButtonGroup,
   Content,
   defaultTheme,
-  Flex,
   Form,
   Heading,
-  Icon,
   InlineAlert,
+  Item,
   Provider,
+  TabList,
+  TabPanels,
+  Tabs,
   TextField,
   ToastContainer,
   ToastQueue,
 } from "@adobe/react-spectrum";
-import { GoogleGenAI } from "@google/genai";
+import {
+  createPartFromUri,
+  createUserContent,
+  GoogleGenAI,
+} from "@google/genai";
 import { createStore } from "@xstate/store";
 import { useSelector } from "@xstate/store/react";
+import { useVideo } from "../popup/data";
+
+// Be brief, concise, and straightforward.
+const SUMMARIZE_PROMPT = `
+Summarize this video briefly.
+
+Do not acknowledge the user or this prompt. Respond ONLY with the summary, and no prefix such as "Here is a summary:".
+
+This is a lecture recording from a class at Stanford Online High School.
+`
 
 async function validateApiKey(apiKey: string): Promise<boolean> {
   try {
@@ -49,34 +64,116 @@ const initialApiKey = await getStoredApiKey();
 const store = createStore({
   context: {
     ai: initialApiKey ? new GoogleGenAI({ apiKey: initialApiKey }) : null,
+    video: await useVideo(),
+    summary: null as string | null,
   },
   on: {
     set_api_key: (context, event: { key: string }) => {
-      if (!import.meta.env.DEV) {
-        localStorage.setItem("gemini_api_key", event.key);
-      }
+      // if (!import.meta.env.DEV) {
+      localStorage.setItem("gemini_api_key", event.key);
+      // }
       context.ai = new GoogleGenAI({ apiKey: event.key });
     },
+    summarize: (context) => {
+      if (context.video.isErr()) return;
+      if (!context.ai) return;
+      async function waitForFileActive(
+        ai: GoogleGenAI,
+        fileName: string,
+        timeoutMs = 2 * 60 * 1000,
+        pollInterval = 1500,
+      ) {
+        const deadline = Date.now() + timeoutMs;
+
+        while (Date.now() < deadline) {
+          // fetch the metadata
+          const meta = await ai.files.get({ name: fileName });
+          if (meta.state === "ACTIVE") {
+            return meta;
+          }
+          await new Promise((r) => setTimeout(r, pollInterval));
+        }
+        throw new Error(`File ${fileName} never became ACTIVE`);
+      }
+
+      async function runSummarize() {
+        const url = context.video._unsafeUnwrap();
+
+        // re-fetch into a Blob
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+        const blob = await resp.blob();
+
+        // step 1: upload
+        const uploadResult = await context.ai!.files.upload({
+          file: blob,
+          config: { mimeType: blob.type },
+        });
+
+        // step 2: wait until that upload is fully processed by Google
+        // (uploadResult.name is "files/…" or just the ID)
+        await waitForFileActive(context.ai!, uploadResult.name!);
+
+        // step 3: now you can safely call generateContent
+        const stream = await context.ai!.models.generateContentStream({
+          model: "gemini-2.0-flash",
+          contents: createUserContent([
+            createPartFromUri(uploadResult.uri!, uploadResult.mimeType!),
+            SUMMARIZE_PROMPT,
+          ]),
+        });
+
+        let out = "";
+        for await (const chunk of stream) {
+          console.log(chunk.text);
+          out += chunk.text;
+          context.summary = out;
+        }
+      }
+
+      runSummarize();
+    }
   },
 });
 
-function Checkmark(props: any) {
+function SummarizeView() {
+  let ai = useSelector(store, (state) => state.context.ai);
+  const output = useSelector(store, (state) => state.context.summary);
+  const videoUrl = useSelector(store, (state) => state.context.video);
+  if (videoUrl.isErr()) return <div>No video detected</div>;
+  if (!ai) return <div>No API key set</div>;
+  const [generated, setGenerated] = useState(false);
+
   return (
-    <Icon {...props}>
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="16"
-        height="16"
-        viewBox="0 0 16 16"
-      >
+    <>
+      {!generated ? (
+        <Button variant="primary" onPress={() => {
+          setGenerated(true);
+          store.trigger.summarize();
+        }}>
+          Summarize
+        </Button>
+      ) : (
+        <div>{output}</div>
+      )}
+    </>
+  );
+}
 
-        <g id="CheckmarkSize400">
-
-          <rect id="Frame" width="16" height="16" fill="red" opacity="0" />
-          <path d="M14.57422,1.897a1.13073,1.13073,0,0,0-1.58692.19092L5.83844,11.18622l-2.8526-3.424a1.13057,1.13057,0,1,0-1.7373,1.44726l3.74658,4.49707c.02307.02771.05694.03784.082.06281a1.06414,1.06414,0,0,0,.08838.1037,1.08237,1.08237,0,0,0,.16113.0874,1.08606,1.08606,0,0,0,.11053.05994,1.12408,1.12408,0,0,0,.4256.09387l.01367-.003a1.12318,1.12318,0,0,0,.42194-.09485,1.09553,1.09553,0,0,0,.12885-.07349,1.08733,1.08733,0,0,0,.16015-.09131,1.05774,1.05774,0,0,0,.08313-.10345c.025-.02619.05957-.03693.0824-.066L14.76465,3.48438A1.13031,1.13031,0,0,0,14.57422,1.897Z" />
-        </g>
-      </svg>
-    </Icon>
+function AIApp() {
+  return (
+    <Tabs aria-label="Adobe Connect AI Panel">
+      <TabList>
+        <Item key="sum">Summarize</Item>
+        <Item key="chat">Chat with Video</Item>
+      </TabList>
+      <TabPanels UNSAFE_style={{ marginTop: "1rem" }}>
+        <Item key="sum">
+          <SummarizeView />
+        </Item>
+        <Item key="chat">Chat with Video</Item>
+      </TabPanels>
+    </Tabs>
   );
 }
 
@@ -93,7 +190,7 @@ function KeyInputView() {
 
     if (isValid) {
       setErrors({});
-      ToastQueue.positive('API key set!', {timeout: 5000})
+      ToastQueue.positive("API key set!", { timeout: 5000 });
       store.trigger.set_api_key({ key: apiKey });
     } else {
       setErrors({
@@ -131,8 +228,22 @@ function KeyInputView() {
 }
 
 function App() {
+  const videoUrl = useSelector(store, (state) => state.context.video);
+  if (videoUrl.isErr()) {
+    return (
+      <InlineAlert variant="negative">
+        <Heading>No video detected</Heading>
+        <Content>
+          Please load a video. Make sure you are on the page of an Adobe Connect
+          recording for Stanford Online High School.
+          <br />
+          Error: {videoUrl.error}
+        </Content>
+      </InlineAlert>
+    );
+  }
   const ai = useSelector(store, (state) => state.context.ai);
-  return ai ? <div>"YOU HAVE AN API KEY YASSS</div> : <KeyInputView />;
+  return ai ? <AIApp /> : <KeyInputView />;
 }
 
 // Mount directly if #root exists (for direct import from index.html)
