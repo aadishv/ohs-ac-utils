@@ -18,6 +18,19 @@ import { GoogleGenAI } from "@google/genai";
 import { createStore } from "@xstate/store";
 import { useSelector } from "@xstate/store/react";
 
+async function validateApiKey(apiKey: string): Promise<boolean> {
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    await ai.models.generateContent({
+      model: "models/gemma-3n-e4b-it",
+      contents: "Return with the shortest possible response: \".\".",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const store = createStore({
   context: {
     ai: null as GoogleGenAI | null,
@@ -50,25 +63,24 @@ function Checkmark(props: any) {
 }
 
 function KeyInputView() {
-  const [key, setKey] = useState("");
-  const [status, setStatus] = useState<"Loading..." | "Success" | "Invalid" | null>(null);
-  const onSubmit = useCallback(() => {
-    (async () => {
-      try {
-        setStatus("Loading...");
-        const ai = new GoogleGenAI({ apiKey: key });
-        const x = await ai.models.generateContent({
-          model: "models/gemma-3n-e4b-it",
-          contents: "Return with the shortest possible response: \".\".",
-        });
-        setStatus("Success");
-        setTimeout(() => { store.trigger.set_api_key({ key: key }); }, 1000);
-      } catch {
-        setStatus("Invalid");
-        setTimeout(() => { setStatus(null); setKey(""); }, 1000);
-      }
-    })();
-  }, [key]);
+  const [errors, setErrors] = useState({});
+  
+  const onSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    
+    const data = Object.fromEntries(new FormData(e.currentTarget));
+    const apiKey = data.apiKey as string;
+    
+    const isValid = await validateApiKey(apiKey);
+    
+    if (isValid) {
+      setErrors({});
+      setTimeout(() => { store.trigger.set_api_key({ key: apiKey }); }, 1000);
+    } else {
+      setErrors({ apiKey: 'Invalid API key. Please check your key and try again.' });
+    }
+  }, []);
+  
   return (
     <InlineAlert variant="negative">
       <Heading>No API key provided</Heading>
@@ -76,28 +88,18 @@ function KeyInputView() {
         In order to use AI features, please provide a Gemini API key. You can go
         to <a href="https://aistudio.google.com">Google AI Studio</a> to create
         an API key.
-        <Form validationBehavior="native" maxWidth="size-3000">
-          <TextField label="Email" name="" isRequired validate={value => value === 'admin' ? 'Nice try!' : null} />
+        <Form 
+          validationBehavior="native" 
+          maxWidth="size-3000"
+          onSubmit={onSubmit}
+          validationErrors={errors}
+        >
+          <TextField label="API Key" name="apiKey" isRequired />
           <ButtonGroup>
             <Button type="submit" variant="primary">Submit</Button>
             <Button type="reset" variant="secondary">Reset</Button>
           </ButtonGroup>
         </Form>
-        <Flex direction="row" gap={8}>
-          <TextField label="Gemini API key" onChange={setKey} UNSAFE_style={{ width: "100%" }} />
-          {status ?
-            <Badge variant={status == "Loading..." ? "info" : status == "Success" ? "positive" : "negative"} UNSAFE_style={{ marginTop: "auto", marginBottom: "2%"}}>{ status }</Badge>
-            :
-            <Button
-              UNSAFE_style={{ marginTop: "auto" }}
-              variant="secondary"
-              aria-label="Submit API key"
-              onPress={onSubmit}
-            >
-              <Checkmark />
-            </Button>
-          }
-        </Flex>
       </Content>
     </InlineAlert>
   );
