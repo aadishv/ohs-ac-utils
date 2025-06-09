@@ -25,7 +25,6 @@ import {
 import { createStore } from "@xstate/store";
 import { useSelector } from "@xstate/store/react";
 import { useVideo, fetchVideoBlob } from "../popup/data";
-import { injectVideoControl, setVideoTime as setVideoTimeInject } from "../lib/video-control";
 
 // Be brief, concise, and straightforward.
 const SUMMARIZE_PROMPT = `
@@ -41,7 +40,9 @@ Indent your paragraphs, keeping HTML whitespace rules in mind.
 
 This is a lecture recording from a class at Stanford Online High School.
 
-After your summary, respond with a timeline. Link to time stamps. For time stamps, always respond with an accurate MM:SS timestamp. Target 5-15 points per video. Here is an end-to-end example:
+After your summary, respond with a timeline. Link to time stamps. For time stamps, always respond with an accurate MM:SS timestamp (MM can be >59). To identify the exact timestamp, you can think through it. For reference, each frame you receive is 10 seconds long (the video you get is downscaled to 0.1 fps). Given all of this information, you can calculate the exact timestamp.
+
+Target 5-15 points per video. Here is an end-to-end example:
 ===========
 <h2>Summary</h2>
 
@@ -50,12 +51,12 @@ After your summary, respond with a timeline. Link to time stamps. For time stamp
 <br><h2>Timeline</h2>
 
 <ul>
-  <li><a href="MM:SS"> Introduction</li>
-  <li><a href="MM:SS">Overview of the course</a></li>
-  <li><a href="MM:SS">Course objectives</a></li>
-  <li><a href="MM:SS">Course structure</a></li>
-  <li><a href="MM:SS">Course materials</a></li>
-  <li><a href="MM:SS">Course evaluation</a></li>
+  <li>Introduction</li>
+  <li>Overview of the course</a></li>
+  <li>Course objectives</a></li>
+  <li>Course structure</a></li>
+  <li>Course materials</a></li>
+  <li>Course evaluation</a></li>
 </ul>
 `
 
@@ -278,22 +279,6 @@ const store = createStore({
     }
   },
 });
-async function setVideoTimestamp(timestamp: number) {
-  try {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id) {
-      // First inject the video control script
-      await injectVideoControl(tab.id);
-      // Then set the video time
-      const response = await setVideoTimeInject(tab.id, timestamp);
-      return response?.success;
-    }
-  } catch (error) {
-    console.error('Failed to control video:', error);
-  }
-  return false;
-}
-
 
 function SummarizeView() {
   let ai = useSelector(store, (state) => state.context.ai);
@@ -305,17 +290,7 @@ function SummarizeView() {
   const [generated, setGenerated] = useState(false);
 
 
-  const handleSummaryClick = useCallback((event: React.MouseEvent) => {
-     const target = event.target as HTMLElement;
-     if (target.tagName === 'A' && target.getAttribute('href')?.match(/^\d+:\d+$/)) {
-       event.preventDefault();
-       const timeStr = target.getAttribute('href')!;
-       const [minutes, seconds] = timeStr.split(':').map(Number);
-       const timestamp = minutes * 60 + seconds;
 
-       setVideoTimestamp(timestamp);
-     }
-   }, []);
 
 
 
@@ -336,7 +311,6 @@ function SummarizeView() {
          <>
            <div
              dangerouslySetInnerHTML={{ __html: output! }}
-             onClick={handleSummaryClick}
            />
          </>
        ) : (
