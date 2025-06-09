@@ -24,7 +24,7 @@ import {
 } from "@google/genai";
 import { createStore } from "@xstate/store";
 import { useSelector } from "@xstate/store/react";
-import { useVideo, fetchVideoBlob } from "../popup/data";
+import { useVideo, fetchVideoBlob, loadVideoWithProgress } from "../popup/data";
 
 // Be brief, concise, and straightforward.
 const SUMMARIZE_PROMPT = `
@@ -40,7 +40,7 @@ Indent your paragraphs, keeping HTML whitespace rules in mind.
 
 This is a lecture recording from a class at Stanford Online High School.
 
-After your summary, respond with a timeline. Link to time stamps. For time stamps, always respond with an accurate MM:SS timestamp (MM can be >59). To identify the exact timestamp, you can think through it. For reference, each frame you receive is 10 seconds long (the video you get is downscaled to 0.1 fps). Given all of this information, you can calculate the exact timestamp.
+After your summary, respond with a timeline.
 
 Target 5-15 points per video. Here is an end-to-end example:
 ===========
@@ -98,9 +98,23 @@ async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: numb
       canvas.height = Math.min(video.videoHeight, 240); // Smaller resolution for speed
 
       const stream = canvas.captureStream(1); // Higher capture rate for smoother recording
-      const mediaRecorder = new MediaRecorder(stream, {
+
+      // Create audio context to preserve original audio
+      const audioContext = new AudioContext();
+      const audioSource = audioContext.createMediaElementSource(video);
+      const audioDestination = audioContext.createMediaStreamDestination();
+      audioSource.connect(audioDestination);
+
+      // Combine video stream with full-quality audio
+      const combinedStream = new MediaStream([
+        ...stream.getVideoTracks(),
+        ...audioDestination.stream.getAudioTracks()
+      ]);
+
+      const mediaRecorder = new MediaRecorder(combinedStream, {
         mimeType: 'video/webm; codecs=vp8',
-        videoBitsPerSecond: 100000 // Lower bitrate for faster processing
+        videoBitsPerSecond: 100000, // Lower bitrate for faster processing
+        audioBitsPerSecond: 128000 // Full quality audio
       });
 
       const chunks: Blob[] = [];
@@ -124,7 +138,7 @@ async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: numb
 
       let frameCount = 0;
       const duration = video.duration;
-      const totalFrames = Math.floor(duration / 10); // 1 frame every 10 seconds
+      const totalFrames = Math.floor(duration / 5); // 1 frame every 5 seconds
 
       const drawFrame = () => {
         if (frameCount >= totalFrames) {
@@ -135,7 +149,7 @@ async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: numb
         const percent = Math.round((frameCount / totalFrames) * 100);
         onProgress?.(percent);
 
-        video.currentTime = frameCount * 10; // Jump by 10 seconds
+        video.currentTime = frameCount * 5; // Jump by 5 seconds
         frameCount++;
       };
 
@@ -160,7 +174,9 @@ const initialApiKey = await getStoredApiKey();
 const store = createStore({
   context: {
     ai: initialApiKey ? new GoogleGenAI({ apiKey: initialApiKey }) : null,
-    video: await useVideo(),
+    video: null as { videoUrl: string | null; error: string | null } | null,
+    videoProgress: 0,
+    isVideoLoading: true,
     summary: null as string | null,
     progressStatus: null as string | null,
   },
@@ -183,8 +199,17 @@ const store = createStore({
       ...context,
       progressStatus: `${event.status} (${event.percent}%)`,
     }),
+    update_video_progress: (context, event: { progress: number }) => ({
+      ...context,
+      videoProgress: event.progress,
+    }),
+    set_video_result: (context, event: { videoUrl: string | null; error: string | null }) => ({
+      ...context,
+      video: { videoUrl: event.videoUrl, error: event.error },
+      isVideoLoading: false,
+    }),
     summarize: (context, event, enqueue) => {
-      if (context.video.isErr()) return context;
+      if (!context.video?.videoUrl) return context;
       if (!context.ai) return context;
 
       enqueue.effect(async () => {
@@ -207,7 +232,7 @@ const store = createStore({
           throw new Error(`File ${fileName} never became ACTIVE`);
         }
 
-        const url = context.video._unsafeUnwrap();
+        const url = context.video!.videoUrl;
 
         // Get the original video URL to fetch the blob from cache
         const videoUrlResult = await new Promise<string>((resolve, reject) => {
@@ -284,8 +309,8 @@ function SummarizeView() {
   let ai = useSelector(store, (state) => state.context.ai);
   const output = useSelector(store, (state) => state.context.summary);
   const progressStatus = useSelector(store, (state) => state.context.progressStatus);
-  const videoUrl = useSelector(store, (state) => state.context.video);
-  if (videoUrl.isErr()) return <div>No video detected</div>;
+  const video = useSelector(store, (state) => state.context.video);
+  if (!video?.videoUrl) return <div>No video detected</div>;
   if (!ai) return <div>No API key set</div>;
   const [generated, setGenerated] = useState(false);
 
@@ -384,8 +409,43 @@ function KeyInputView() {
 }
 
 function App() {
-  const videoUrl = useSelector(store, (state) => state.context.video);
-  if (videoUrl.isErr()) {
+  const video = useSelector(store, (state) => state.context.video);
+  const videoProgress = useSelector(store, (state) => state.context.videoProgress);
+  const isVideoLoading = useSelector(store, (state) => state.context.isVideoLoading);
+  const ai = useSelector(store, (state) => state.context.ai);
+
+  // Initialize video loading
+  React.useEffect(() => {
+    let mounted = true;
+
+    loadVideoWithProgress((progress) => {
+      if (mounted) {
+        store.trigger.update_video_progress({ progress });
+      }
+    }).then((result) => {
+      if (mounted) {
+        store.trigger.set_video_result({
+          videoUrl: result.videoUrl,
+          error: result.error
+        });
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (isVideoLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem' }}>
+        <ProgressCircle isIndeterminate />
+        <span>Loading video... {videoProgress}%</span>
+      </div>
+    );
+  }
+
+  if (video?.error) {
     return (
       <InlineAlert variant="negative">
         <Heading>No video detected</Heading>
@@ -393,12 +453,12 @@ function App() {
           Please load a video. Make sure you are on the page of an Adobe Connect
           recording for Stanford Online High School.
           <br />
-          Error: {videoUrl.error}
+          Error: {video.error}
         </Content>
       </InlineAlert>
     );
   }
-  const ai = useSelector(store, (state) => state.context.ai);
+
   return ai ? <AIApp /> : <KeyInputView />;
 }
 

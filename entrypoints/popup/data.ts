@@ -50,7 +50,7 @@ const blobCache = new Map<string, Blob>()
  * Step 2: download the video as a blob.
  * Returns ResultAsync< Blob, errorMessage >
  */
-export function fetchVideoBlob(videoUrl: string): ResultAsync<Blob, string> {
+export function fetchVideoBlob(videoUrl: string, onProgress?: (percent: number) => void): ResultAsync<Blob, string> {
   return ResultAsync.fromPromise(
     (async () => {
       const cleanUrl = trimEncodedQuotes(videoUrl)
@@ -73,11 +73,44 @@ export function fetchVideoBlob(videoUrl: string): ResultAsync<Blob, string> {
       if (!res.ok) {
         throw new Error(`HTTP error: ${res.status}`)
       }
-      const blob = await res.blob()
-      if (blob.type !== 'video/mp4') {
-        console.warn(`Expected video/mp4 but got ${blob.type}`)
+
+      const contentLength = res.headers.get('Content-Length')
+      const totalSize = contentLength ? parseInt(contentLength, 10) : 0
+
+      if (!res.body || totalSize === 0) {
+        const blob = await res.blob()
+        if (blob.type !== 'video/mp4') {
+          console.warn(`Expected video/mp4 but got ${blob.type}`)
+        }
+        onProgress?.(100)
+        return blob
       }
 
+      const reader = res.body.getReader()
+      const chunks: Uint8Array[] = []
+      let receivedLength = 0
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        chunks.push(value)
+        receivedLength += value.length
+
+        if (totalSize > 0) {
+          const percent = Math.round((receivedLength / totalSize) * 100)
+          onProgress?.(percent)
+        }
+      }
+
+      const allChunks = new Uint8Array(receivedLength)
+      let position = 0
+      for (const chunk of chunks) {
+        allChunks.set(chunk, position)
+        position += chunk.length
+      }
+
+      const blob = new Blob([allChunks], { type: 'video/mp4' })
       // Cache the blob
       blobCache.set(cleanUrl, blob)
 
@@ -105,19 +138,63 @@ export function useVideo(): ResultAsync<string, string> {
   return getVideoUrl()
     .andThen((videoUrl) => {
       const cleanUrl = trimEncodedQuotes(videoUrl)
-      
+
       // Check if we already have an object URL for this video
       if (urlCache.has(cleanUrl)) {
         return ResultAsync.fromSafePromise(Promise.resolve(urlCache.get(cleanUrl)!))
       }
-      
-      return fetchVideoBlob(videoUrl)
+
+      return fetchVideoBlob(videoUrl, undefined)
         .map((blob) => {
           const objectUrl = URL.createObjectURL(blob)
           urlCache.set(cleanUrl, objectUrl)
           return objectUrl
         })
     })
+}
+
+/**
+ * Hook that loads video with progress tracking
+ * Returns { progress: number | null, videoUrl: string | null, error: string | null, isLoading: boolean }
+ */
+export async function loadVideoWithProgress(
+  onProgress: (progress: number) => void
+): Promise<{ videoUrl: string | null; error: string | null }> {
+  try {
+    const videoUrlResult = await getVideoUrl()
+
+    if (videoUrlResult.isErr()) {
+      return { videoUrl: null, error: videoUrlResult.error }
+    }
+
+    const videoUrl = videoUrlResult.value
+    const cleanUrl = trimEncodedQuotes(videoUrl)
+
+    // Check if we already have an object URL for this video
+    if (urlCache.has(cleanUrl)) {
+      onProgress(100)
+      return { videoUrl: urlCache.get(cleanUrl)!, error: null }
+    }
+
+    // Start the download with progress tracking
+    const blobResult = await fetchVideoBlob(videoUrl, onProgress)
+
+    if (blobResult.isErr()) {
+      return { videoUrl: null, error: blobResult.error }
+    }
+
+    const blob = blobResult.value
+    const objectUrl = URL.createObjectURL(blob)
+    urlCache.set(cleanUrl, objectUrl)
+    onProgress(100)
+    
+    return { videoUrl: objectUrl, error: null }
+  } catch (error) {
+    return { 
+      videoUrl: null, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    }
+  }
 }
 
 // MARK: - downloading utilities
