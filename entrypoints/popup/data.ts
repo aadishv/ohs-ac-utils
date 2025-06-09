@@ -43,6 +43,9 @@ function getVideoUrl(): ResultAsync<string, string> {
   )
 }
 
+// Cache for storing blobs keyed by video URL
+const blobCache = new Map<string, Blob>()
+
 /**
  * Step 2: download the video as a blob.
  * Returns ResultAsync< Blob, errorMessage >
@@ -51,6 +54,12 @@ export function fetchVideoBlob(videoUrl: string): ResultAsync<Blob, string> {
   return ResultAsync.fromPromise(
     (async () => {
       const cleanUrl = trimEncodedQuotes(videoUrl)
+
+      // Check cache first
+      if (blobCache.has(cleanUrl)) {
+        return blobCache.get(cleanUrl)!
+      }
+
       const res = await fetch(cleanUrl, {
         headers: {
           accept: '*/*',
@@ -68,6 +77,10 @@ export function fetchVideoBlob(videoUrl: string): ResultAsync<Blob, string> {
       if (blob.type !== 'video/mp4') {
         console.warn(`Expected video/mp4 but got ${blob.type}`)
       }
+
+      // Cache the blob
+      blobCache.set(cleanUrl, blob)
+
       return blob
     })(),
     (error) =>
@@ -76,6 +89,9 @@ export function fetchVideoBlob(videoUrl: string): ResultAsync<Blob, string> {
         : 'Unknown error while fetching video blob'
   )
 }
+
+// Cache for storing object URLs keyed by video URL
+const urlCache = new Map<string, string>()
 
 /**
  * The combined hook/function:
@@ -87,8 +103,21 @@ export function fetchVideoBlob(videoUrl: string): ResultAsync<Blob, string> {
  */
 export function useVideo(): ResultAsync<string, string> {
   return getVideoUrl()
-    .andThen(fetchVideoBlob)
-    .map((blob) => URL.createObjectURL(blob))
+    .andThen((videoUrl) => {
+      const cleanUrl = trimEncodedQuotes(videoUrl)
+      
+      // Check if we already have an object URL for this video
+      if (urlCache.has(cleanUrl)) {
+        return ResultAsync.fromSafePromise(Promise.resolve(urlCache.get(cleanUrl)!))
+      }
+      
+      return fetchVideoBlob(videoUrl)
+        .map((blob) => {
+          const objectUrl = URL.createObjectURL(blob)
+          urlCache.set(cleanUrl, objectUrl)
+          return objectUrl
+        })
+    })
 }
 
 // MARK: - downloading utilities

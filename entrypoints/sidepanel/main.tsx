@@ -24,7 +24,7 @@ import {
 } from "@google/genai";
 import { createStore } from "@xstate/store";
 import { useSelector } from "@xstate/store/react";
-import { useVideo } from "../popup/data";
+import { useVideo, fetchVideoBlob } from "../popup/data";
 import { injectVideoControl, setVideoTime as setVideoTimeInject } from "../lib/video-control";
 
 // Be brief, concise, and straightforward.
@@ -50,12 +50,12 @@ After your summary, respond with a timeline. Link to time stamps. Target 5-15 po
 <br><h2>Timeline</h2>
 
 <ul>
-  <li><a href="0:00"> Introduction</li>
-  <li><a href="00:10">Overview of the course</a></li>
-  <li><a href="00:20">Course objectives</a></li>
-  <li><a href="00:30">Course structure</a></li>
-  <li><a href="00:40">Course materials</a></li>
-  <li><a href="00:50">Course evaluation</a></li>
+  <li><a href="MM:SS"> Introduction</li>
+  <li><a href="MM:SS">Overview of the course</a></li>
+  <li><a href="MM:SS">Course objectives</a></li>
+  <li><a href="MM:SS">Course structure</a></li>
+  <li><a href="MM:SS">Course materials</a></li>
+  <li><a href="MM:SS">Course evaluation</a></li>
 </ul>
 `
 
@@ -83,6 +83,76 @@ async function getStoredApiKey(): Promise<string | null> {
   return null;
 }
 
+async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: number) => void): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+
+    video.src = URL.createObjectURL(videoBlob);
+    video.muted = true;
+
+    video.onloadedmetadata = () => {
+      canvas.width = Math.min(video.videoWidth, 640); // Max width 640px
+      canvas.height = Math.min(video.videoHeight, 480); // Max height 480px
+
+      const stream = canvas.captureStream(0.1); // 1 frame every 10 seconds
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'video/webm; codecs=vp8'
+      });
+
+      const chunks: Blob[] = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const processedBlob = new Blob(chunks, { type: 'video/webm' });
+        URL.revokeObjectURL(video.src);
+        resolve(processedBlob);
+      };
+
+      mediaRecorder.onerror = (event) => {
+        URL.revokeObjectURL(video.src);
+        reject(new Error('MediaRecorder error'));
+      };
+
+      let frameCount = 0;
+      const duration = video.duration;
+      const totalFrames = Math.floor(duration / 10); // 1 frame every 10 seconds
+
+      const drawFrame = () => {
+        if (frameCount >= totalFrames) {
+          mediaRecorder.stop();
+          return;
+        }
+
+        const percent = Math.round((frameCount / totalFrames) * 100);
+        onProgress?.(percent);
+
+        video.currentTime = frameCount * 10; // Jump by 10 seconds
+        frameCount++;
+      };
+
+      video.onseeked = () => {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        setTimeout(drawFrame, 100); // Small delay between frames
+      };
+
+      mediaRecorder.start();
+      drawFrame();
+    };
+
+    video.onerror = () => {
+      URL.revokeObjectURL(video.src);
+      reject(new Error('Video loading error'));
+    };
+  });
+}
+
 const initialApiKey = await getStoredApiKey();
 
 const store = createStore({
@@ -90,6 +160,7 @@ const store = createStore({
     ai: initialApiKey ? new GoogleGenAI({ apiKey: initialApiKey }) : null,
     video: await useVideo(),
     summary: null as string | null,
+    progressStatus: null as string | null,
   },
   on: {
     set_api_key: (context, event: { key: string }) => {
@@ -101,6 +172,14 @@ const store = createStore({
     update_summary: (context, event: { chunk: string }) => ({
       ...context,
       summary: (context.summary || "") + event.chunk,
+    }),
+    update_progress: (context, event: { status: string }) => ({
+      ...context,
+      progressStatus: event.status,
+    }),
+    update_progress_with_percent: (context, event: { status: string; percent: number }) => ({
+      ...context,
+      progressStatus: `${event.status} (${event.percent}%)`,
     }),
     summarize: (context, event, enqueue) => {
       if (context.video.isErr()) return context;
@@ -128,22 +207,50 @@ const store = createStore({
 
         const url = context.video._unsafeUnwrap();
 
-        // re-fetch into a Blob
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
-        const blob = await resp.blob();
+        // Get the original video URL to fetch the blob from cache
+        const videoUrlResult = await new Promise<string>((resolve, reject) => {
+          const extApi = (window as any).browser?.runtime?.sendMessage
+            ? (window as any).browser
+            : (window as any).chrome;
+          
+          extApi.runtime.sendMessage({ action: 'getVideoRequest' })
+            .then((response: any) => {
+              if (response?.success && typeof response.data === 'string') {
+                resolve(response.data);
+              } else {
+                reject(new Error('Failed to get video URL'));
+              }
+            })
+            .catch(reject);
+        });
+
+        // Use cached blob from fetchVideoBlob
+        const blobResult = await fetchVideoBlob(videoUrlResult);
+        if (blobResult.isErr()) {
+          throw new Error(`Failed to get video blob: ${blobResult.error}`);
+        }
+        const blob = blobResult.value;
+
+        // Downscale video to 1fps
+        store.trigger.update_progress({ status: "Downscaling video" });
+        const downscaledBlob = await downscaleVideoTo1fps(blob, (percent) => {
+          store.trigger.update_progress_with_percent({ status: "Downscaling video", percent });
+        });
 
         // step 1: upload
+        store.trigger.update_progress({ status: "Uploading video" });
         const uploadResult = await context.ai!.files.upload({
-          file: blob,
-          config: { mimeType: blob.type },
+          file: downscaledBlob,
+          config: { mimeType: downscaledBlob.type },
         });
 
         // step 2: wait until that upload is fully processed by Google
         // (uploadResult.name is "files/…" or just the ID)
+        store.trigger.update_progress({ status: "Waiting for video to become active" });
         await waitForFileActive(context.ai!, uploadResult.name!);
 
         // step 3: now you can safely call generateContent
+        store.trigger.update_progress({ status: "Running AI" });
         const input = {
           model: "gemini-2.0-flash",
           contents: createUserContent([
@@ -165,6 +272,7 @@ const store = createStore({
       return {
         ...context,
         summary: "",
+        progressStatus: null,
       };
     }
   },
@@ -189,6 +297,7 @@ async function setVideoTimestamp(timestamp: number) {
 function SummarizeView() {
   let ai = useSelector(store, (state) => state.context.ai);
   const output = useSelector(store, (state) => state.context.summary);
+  const progressStatus = useSelector(store, (state) => state.context.progressStatus);
   const videoUrl = useSelector(store, (state) => state.context.video);
   if (videoUrl.isErr()) return <div>No video detected</div>;
   if (!ai) return <div>No API key set</div>;
@@ -221,16 +330,21 @@ function SummarizeView() {
            </Button>
          </>
        ) : (
-         output ? (
+       output ? (
 
-           <>
-             <div
-               dangerouslySetInnerHTML={{ __html: output! }}
-               onClick={handleSummaryClick}
-             />
-           </>
-         ) : <ProgressCircle isIndeterminate />
-       )}
+         <>
+           <div
+             dangerouslySetInnerHTML={{ __html: output! }}
+             onClick={handleSummaryClick}
+           />
+         </>
+       ) : (
+         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+           <ProgressCircle isIndeterminate />
+           {progressStatus && <span>{progressStatus}</span>}
+         </div>
+       )
+     )}
      </>
    );
 }
