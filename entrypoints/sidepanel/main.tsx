@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { Suspense, useCallback, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Button,
@@ -9,6 +9,7 @@ import {
   Heading,
   InlineAlert,
   Item,
+  ProgressCircle,
   Provider,
   TabList,
   TabPanels,
@@ -32,7 +33,30 @@ Summarize this video briefly.
 
 Do not acknowledge the user or this prompt. Respond ONLY with the summary, and no prefix such as "Here is a summary:".
 
+Be brief, concise, and straightforward. Target one paragraph for each important aspect. Do not aim to discuss all points, but instead focus on a broad overview.
+
+Use HTML instead of Markdown for formatting when formatting is needed. You can create custom styles with CSS, although that is not recommended for most use cases.
+
+Indent your paragraphs, keeping HTML whitespace rules in mind.
+
 This is a lecture recording from a class at Stanford Online High School.
+
+After your summary, respond with a timeline. Link to time stamps. Here is an example:
+
+<h2>Summary</h2>
+
+...
+
+<br><br><br><h2>Timeline</h2>
+
+<ul>
+  <li><a href="0:00"> Introduction</li>
+  <li><a href="00:10">Overview of the course</a></li>
+  <li><a href="00:20">Course objectives</a></li>
+  <li><a href="00:30">Course structure</a></li>
+  <li><a href="00:40">Course materials</a></li>
+  <li><a href="00:50">Course evaluation</a></li>
+</ul>
 `
 
 async function validateApiKey(apiKey: string): Promise<boolean> {
@@ -74,29 +98,34 @@ const store = createStore({
       // }
       context.ai = new GoogleGenAI({ apiKey: event.key });
     },
-    summarize: (context) => {
-      if (context.video.isErr()) return;
-      if (!context.ai) return;
-      async function waitForFileActive(
-        ai: GoogleGenAI,
-        fileName: string,
-        timeoutMs = 2 * 60 * 1000,
-        pollInterval = 1500,
-      ) {
-        const deadline = Date.now() + timeoutMs;
+    update_summary: (context, event: { chunk: string }) => ({
+      ...context,
+      summary: (context.summary || "") + event.chunk,
+    }),
+    summarize: (context, event, enqueue) => {
+      if (context.video.isErr()) return context;
+      if (!context.ai) return context;
 
-        while (Date.now() < deadline) {
-          // fetch the metadata
-          const meta = await ai.files.get({ name: fileName });
-          if (meta.state === "ACTIVE") {
-            return meta;
+      enqueue.effect(async () => {
+        async function waitForFileActive(
+          ai: GoogleGenAI,
+          fileName: string,
+          timeoutMs = 2 * 60 * 1000,
+          pollInterval = 1500,
+        ) {
+          const deadline = Date.now() + timeoutMs;
+
+          while (Date.now() < deadline) {
+            // fetch the metadata
+            const meta = await ai.files.get({ name: fileName });
+            if (meta.state === "ACTIVE") {
+              return meta;
+            }
+            await new Promise((r) => setTimeout(r, pollInterval));
           }
-          await new Promise((r) => setTimeout(r, pollInterval));
+          throw new Error(`File ${fileName} never became ACTIVE`);
         }
-        throw new Error(`File ${fileName} never became ACTIVE`);
-      }
 
-      async function runSummarize() {
         const url = context.video._unsafeUnwrap();
 
         // re-fetch into a Blob
@@ -115,23 +144,28 @@ const store = createStore({
         await waitForFileActive(context.ai!, uploadResult.name!);
 
         // step 3: now you can safely call generateContent
-        const stream = await context.ai!.models.generateContentStream({
+        const input = {
           model: "gemini-2.0-flash",
           contents: createUserContent([
             createPartFromUri(uploadResult.uri!, uploadResult.mimeType!),
             SUMMARIZE_PROMPT,
           ]),
-        });
+        }
+        const stream = await context.ai!.models.generateContentStream(input);
 
-        let out = "";
         for await (const chunk of stream) {
           console.log(chunk.text);
-          out += chunk.text;
-          context.summary = out;
+          store.trigger.update_summary({ chunk: chunk.text! });
         }
-      }
+        const tokens = (await context.ai!.models.countTokens(input)).totalTokens!;
+        store.trigger.update_summary({ chunk: `<br /> <br /> Used ${tokens} tokens.` });
+      });
 
-      runSummarize();
+      // Reset summary before starting
+      return {
+        ...context,
+        summary: "",
+      };
     }
   },
 });
@@ -154,7 +188,9 @@ function SummarizeView() {
           Summarize
         </Button>
       ) : (
-        <div>{output}</div>
+        output ?
+        <div dangerouslySetInnerHTML={{ __html: output! }} />
+        : <ProgressCircle />
       )}
     </>
   );
@@ -253,7 +289,9 @@ if (rootElement) {
     <Provider theme={defaultTheme}>
       <div style={{ padding: "1rem", height: "100vh" }}>
         <ToastContainer />
+        <Suspense>
         <App />
+        </Suspense>
       </div>
     </Provider>,
   );
