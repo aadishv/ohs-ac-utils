@@ -41,7 +41,7 @@ Indent your paragraphs, keeping HTML whitespace rules in mind.
 
 This is a lecture recording from a class at Stanford Online High School.
 
-After your summary, respond with a timeline. Link to time stamps. Target 5-15 points per video. Here is an end-to-end example:
+After your summary, respond with a timeline. Link to time stamps. For time stamps, always respond with an accurate MM:SS timestamp. Target 5-15 points per video. Here is an end-to-end example:
 ===========
 <h2>Summary</h2>
 
@@ -93,12 +93,13 @@ async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: numb
     video.muted = true;
 
     video.onloadedmetadata = () => {
-      canvas.width = Math.min(video.videoWidth, 640); // Max width 640px
-      canvas.height = Math.min(video.videoHeight, 480); // Max height 480px
+      canvas.width = Math.min(video.videoWidth, 320); // Smaller resolution for speed
+      canvas.height = Math.min(video.videoHeight, 240); // Smaller resolution for speed
 
-      const stream = canvas.captureStream(0.1); // 1 frame every 10 seconds
+      const stream = canvas.captureStream(1); // Higher capture rate for smoother recording
       const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'video/webm; codecs=vp8'
+        mimeType: 'video/webm; codecs=vp8',
+        videoBitsPerSecond: 100000 // Lower bitrate for faster processing
       });
 
       const chunks: Blob[] = [];
@@ -139,7 +140,7 @@ async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: numb
 
       video.onseeked = () => {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        setTimeout(drawFrame, 100); // Small delay between frames
+        drawFrame(); // Remove delay for faster processing
       };
 
       mediaRecorder.start();
@@ -212,7 +213,7 @@ const store = createStore({
           const extApi = (window as any).browser?.runtime?.sendMessage
             ? (window as any).browser
             : (window as any).chrome;
-          
+
           extApi.runtime.sendMessage({ action: 'getVideoRequest' })
             .then((response: any) => {
               if (response?.success && typeof response.data === 'string') {
