@@ -7,7 +7,8 @@ export default defineConfig({
     description: 'Offers useful download utilities for Stanford Online High School students accessing Adobe Connect recordings.',
     permissions: [
       'webRequest', // To inspect network requests
-      'sidePanel'
+      'sidePanel',
+      'activeTab'  // To communicate with content scripts
     ],
     host_permissions: [
       'https://*/*',   // To intercept requests on any page. Be as specific as possible if you can.

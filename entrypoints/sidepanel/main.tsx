@@ -2,7 +2,6 @@ import React, { Suspense, useCallback, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Button,
-  ButtonGroup,
   Content,
   defaultTheme,
   Form,
@@ -26,6 +25,7 @@ import {
 import { createStore } from "@xstate/store";
 import { useSelector } from "@xstate/store/react";
 import { useVideo } from "../popup/data";
+import { injectVideoControl, setVideoTime as setVideoTimeInject } from "../lib/video-control";
 
 // Be brief, concise, and straightforward.
 const SUMMARIZE_PROMPT = `
@@ -41,13 +41,13 @@ Indent your paragraphs, keeping HTML whitespace rules in mind.
 
 This is a lecture recording from a class at Stanford Online High School.
 
-After your summary, respond with a timeline. Link to time stamps. Here is an example:
-
+After your summary, respond with a timeline. Link to time stamps. Target 5-15 points per video. Here is an end-to-end example:
+===========
 <h2>Summary</h2>
 
 ...
 
-<br><br><br><h2>Timeline</h2>
+<br><h2>Timeline</h2>
 
 <ul>
   <li><a href="0:00"> Introduction</li>
@@ -169,6 +169,22 @@ const store = createStore({
     }
   },
 });
+async function setVideoTimestamp(timestamp: number) {
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      // First inject the video control script
+      await injectVideoControl(tab.id);
+      // Then set the video time
+      const response = await setVideoTimeInject(tab.id, timestamp);
+      return response?.success;
+    }
+  } catch (error) {
+    console.error('Failed to control video:', error);
+  }
+  return false;
+}
+
 
 function SummarizeView() {
   let ai = useSelector(store, (state) => state.context.ai);
@@ -178,22 +194,45 @@ function SummarizeView() {
   if (!ai) return <div>No API key set</div>;
   const [generated, setGenerated] = useState(false);
 
-  return (
-    <>
-      {!generated ? (
-        <Button variant="primary" onPress={() => {
-          setGenerated(true);
-          store.trigger.summarize();
-        }}>
-          Summarize
-        </Button>
-      ) : (
-        output ?
-        <div dangerouslySetInnerHTML={{ __html: output! }} />
-        : <ProgressCircle />
-      )}
-    </>
-  );
+
+  const handleSummaryClick = useCallback((event: React.MouseEvent) => {
+     const target = event.target as HTMLElement;
+     if (target.tagName === 'A' && target.getAttribute('href')?.match(/^\d+:\d+$/)) {
+       event.preventDefault();
+       const timeStr = target.getAttribute('href')!;
+       const [minutes, seconds] = timeStr.split(':').map(Number);
+       const timestamp = minutes * 60 + seconds;
+
+       setVideoTimestamp(timestamp);
+     }
+   }, []);
+
+
+
+   return (
+     <>
+       {!generated ? (
+         <>
+           <Button variant="primary" onPress={() => {
+             setGenerated(true);
+             store.trigger.summarize();
+           }}>
+             Generate AI Summary
+           </Button>
+         </>
+       ) : (
+         output ? (
+
+           <>
+             <div
+               dangerouslySetInnerHTML={{ __html: output! }}
+               onClick={handleSummaryClick}
+             />
+           </>
+         ) : <ProgressCircle isIndeterminate />
+       )}
+     </>
+   );
 }
 
 function AIApp() {
@@ -249,14 +288,6 @@ function KeyInputView() {
           validationErrors={errors}
         >
           <TextField label="API Key" name="apiKey" isRequired />
-          <ButtonGroup>
-            <Button type="submit" variant="primary">
-              Submit
-            </Button>
-            <Button type="reset" variant="secondary">
-              Reset
-            </Button>
-          </ButtonGroup>
         </Form>
       </Content>
     </InlineAlert>
