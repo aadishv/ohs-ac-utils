@@ -16,8 +16,10 @@
   },
   "dependencies": {
     "@adobe/react-spectrum": "^3.41.0",
+    "@google/genai": "^1.4.0",
     "@tailwindcss/vite": "^4.1.6",
     "@wxt-dev/auto-icons": "^1.0.2",
+    "@xstate/store": "^3.6.2",
     "autoprefixer": "^10.4.21",
     "neverthrow": "^8.2.0",
     "postcss": "^8.5.3",
