@@ -38,44 +38,24 @@ import {
 
 // Be brief, concise, and straightforward.
 const SUMMARIZE_PROMPT = `
-Summarize this video briefly.
+Summarize this video briefly. A transcript is provided to aid you.
 
 Do not acknowledge the user or this prompt. Respond ONLY with the summary, and no prefix such as "Here is a summary:".
 
-The transcript is also provided, in VTT format. You can use this to aid you in finding timestamps. Keep in mind that the transcript is not the source of truth, as it is not multilingual or perfectly accurate.
-
 Be brief, concise, and straightforward. Target one paragraph for each important aspect. Do not aim to discuss all points, but instead focus on a broad overview.
 
-Use HTML instead of Markdown for formatting when formatting is needed. You can create custom styles with CSS, although that is not recommended for most use cases.
+Use HTML instead of Markdown for formatting when formatting is needed. NEVER use Markdown. Make sure to use <br /> for newlines.
 
 Indent your paragraphs, keeping HTML whitespace rules in mind.
 
 This is a lecture recording from a class at Stanford Online High School.
 
-
-After your summary, respond with a timeline.
-
-Link to time stamps of each slide displayed. For time stamps, always respond with an accurate MM:SS timestamp.
-
-If slides are not displayed or a separate event occurs, that may also be a valid time stamp + label.
-
-Target 5-15 points per video. Here is an end-to-end example (with made-up labels and timestamps):
-
+Example format:
 ===========
+
 <h2>Summary</h2>
 
 ...
-
-<br><h2>Timeline</h2>
-
-<ul>
-  <li><a href="0:00">Introduction</a></li>
-  <li><a href="0:17">Overview of the course</a></li>
-  <li><a href="22:00">Course objectives</a></li>
-  <li><a href="34:00">Course structure</a></li>
-  <li><a href="45:59">Course materials</a></li>
-  <li><a href="67:02">Course evaluation</a></li>
-</ul>
 `;
 async function setVideoTimestamp(timestamp: number) {
   try {
@@ -134,6 +114,21 @@ function saveSummaryToCache(videoUrl: string, summary: string): void {
 function getCachedSummary(videoUrl: string): string | null {
   const cache = getSummaryCache();
   return cache[videoUrl] || null;
+}
+
+// Persistent cache for uploaded video URIs, keyed by first 3 transcript lines
+function getUploadCache(): Record<string, { uri: string; mimeType: string }> {
+  const stored = localStorage.getItem("video_upload_cache");
+  return stored ? JSON.parse(stored) : {};
+}
+function saveUploadToCache(key: string, uri: string, mimeType: string): void {
+  const cache = getUploadCache();
+  cache[key] = { uri, mimeType };
+  localStorage.setItem("video_upload_cache", JSON.stringify(cache));
+}
+function getCachedUpload(key: string): { uri: string; mimeType: string } | null {
+  const cache = getUploadCache();
+  return cache[key] || null;
 }
 
 async function downscaleVideoTo1fps(
@@ -309,122 +304,166 @@ const store = createStore({
       },
     }),
     summarize: (context, event, enqueue) => {
-      if (!context.video?.videoUrl) return context;
       if (!context.ai) return context;
 
-      // Check if we have a cached summary for this video URL
-      const cachedSummary = getCachedSummary(context.video.videoUrl);
-      if (cachedSummary) {
-        return {
-          ...context,
-          summary: cachedSummary,
-          progressStatus: null,
-        };
-      }
-
+      // Reset summary before starting
       enqueue.effect(async () => {
-        async function waitForFileActive(
-          ai: GoogleGenAI,
-          fileName: string,
-          timeoutMs = 2 * 60 * 1000,
-          pollInterval = 1500,
-        ) {
-          const deadline = Date.now() + timeoutMs;
-
-          while (Date.now() < deadline) {
-            // fetch the metadata
-            const meta = await ai.files.get({ name: fileName });
-            if (meta.state === "ACTIVE") {
-              return meta;
-            }
-            await new Promise((r) => setTimeout(r, pollInterval));
-          }
-          throw new Error(`File ${fileName} never became ACTIVE`);
-        }
-
-        const url = context.video!.videoUrl;
-
-        // Get the original video URL to fetch the blob from cache
-        const videoUrlResult = await new Promise<string>((resolve, reject) => {
+        // Step 1: Load video (get URL)
+        let lastLoadPercent = 0;
+        store.trigger.update_progress_with_percent({
+          status: "Loading video",
+          percent: 0,
+        });
+        const videoUrl: string = await new Promise((resolve, reject) => {
           const extApi = (window as any).browser?.runtime?.sendMessage
             ? (window as any).browser
             : (window as any).chrome;
-
-          extApi.runtime
-            .sendMessage({ action: "getVideoRequest" })
-            .then((response: any) => {
-              if (response?.success && typeof response.data === "string") {
-                resolve(response.data);
+          // Try to use loadVideoWithProgress if available for percent
+          if (typeof loadVideoWithProgress === "function") {
+            loadVideoWithProgress((percent: number) => {
+              if (percent !== lastLoadPercent) {
+                lastLoadPercent = percent;
+                store.trigger.update_progress_with_percent({
+                  status: "Loading video",
+                  percent,
+                });
+              }
+            }).then((result: any) => {
+              if (result?.videoUrl) {
+                resolve(result.videoUrl);
               } else {
                 reject(new Error("Failed to get video URL"));
               }
-            })
-            .catch(reject);
+            }).catch(reject);
+          } else {
+            extApi.runtime
+              .sendMessage({ action: "getVideoRequest" })
+              .then((response: any) => {
+                if (response?.success && typeof response.data === "string") {
+                  resolve(response.data);
+                } else {
+                  reject(new Error("Failed to get video URL"));
+                }
+              })
+              .catch(reject);
+          }
         });
 
-        // Use cached blob from fetchVideoBlob
-        const blobResult = await fetchVideoBlob(videoUrlResult);
-        if (blobResult.isErr()) {
-          throw new Error(`Failed to get video blob: ${blobResult.error}`);
+        // Step 2: Fetch transcript and get first 3 lines as key
+        store.trigger.update_progress({ status: "Loading transcript" });
+        const vttText = await fetchVttText(await getVttUrl().unwrapOr("")).unwrapOr("Transcript not found");
+        const transcriptLines = vttText.split("\n").filter(Boolean).slice(0, 3).join("\n");
+        const transcriptKey = transcriptLines || videoUrl; // fallback to URL if transcript missing
+
+        // Step 3: Check for cached summary by videoUrl
+        const cachedSummary = getCachedSummary(videoUrl);
+        if (cachedSummary) {
+          store.trigger.update_summary({ chunk: cachedSummary });
+          return;
         }
-        const blob = blobResult.value;
 
-        // Downscale video to 1fps
-        store.trigger.update_progress({ status: "Downscaling video" });
-        const downscaledBlob = await downscaleVideoTo1fps(blob, (percent) => {
+        // Step 4: Check for cached upload by transcript key
+        let uploadInfo = getCachedUpload(transcriptKey);
+
+        let uploadUri: string | undefined;
+        let uploadMime: string | undefined;
+
+        if (uploadInfo) {
+          uploadUri = uploadInfo.uri;
+          uploadMime = uploadInfo.mimeType;
+        } else {
+          // Step 5: Download and downscale video
+          let lastPercent = 0;
           store.trigger.update_progress_with_percent({
-            status: "Downscaling video",
-            percent,
+            status: "Downloading video",
+            percent: 0,
           });
-        });
+          const blobResult = await fetchVideoBlob(videoUrl, (percent: number) => {
+            if (percent !== lastPercent) {
+              lastPercent = percent;
+              store.trigger.update_progress_with_percent({
+                status: "Downloading video",
+                percent,
+              });
+            }
+          });
+          if (blobResult.isErr()) {
+            throw new Error(`Failed to get video blob: ${blobResult.error}`);
+          }
+          const blob = blobResult.value;
 
-        // step 1: upload
-        store.trigger.update_progress({ status: "Uploading video" });
-        const uploadResult = await context.ai!.files.upload({
-          file: downscaledBlob,
-          config: { mimeType: downscaledBlob.type },
-        });
+          store.trigger.update_progress({ status: "Downscaling video" });
+          const downscaledBlob = await downscaleVideoTo1fps(blob, (percent) => {
+            store.trigger.update_progress_with_percent({
+              status: "Downscaling video",
+              percent,
+            });
+          });
 
-        // step 2: wait until that upload is fully processed by Google
-        // (uploadResult.name is "files/…" or just the ID)
-        store.trigger.update_progress({
-          status: "Waiting for video to become active",
-        });
-        await waitForFileActive(context.ai!, uploadResult.name!);
+          // Step 6: Upload video
+          store.trigger.update_progress({ status: "Uploading video" });
+          const uploadResult = await context.ai!.files.upload({
+            file: downscaledBlob,
+            config: { mimeType: downscaledBlob.type },
+          });
 
-        // step 3: now you can safely call generateContent
+          // Step 7: Wait for upload to become active
+          store.trigger.update_progress({
+            status: "Waiting for video to become active",
+          });
+          async function waitForFileActive(
+            ai: GoogleGenAI,
+            fileName: string,
+            timeoutMs = 2 * 60 * 1000,
+            pollInterval = 1500,
+          ) {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+              const meta = await ai.files.get({ name: fileName });
+              if (meta.state === "ACTIVE") return meta;
+              await new Promise((r) => setTimeout(r, pollInterval));
+            }
+            throw new Error(`File ${fileName} never became ACTIVE`);
+          }
+          await waitForFileActive(context.ai!, uploadResult.name!);
+
+          uploadUri = uploadResult.uri!;
+          uploadMime = uploadResult.mimeType!;
+          saveUploadToCache(transcriptKey, uploadUri, uploadMime);
+        }
+
+        // Step 8: Run AI
         store.trigger.update_progress({ status: "Running AI" });
         const input = {
           model: "gemini-2.0-flash",
           contents: createUserContent([
-            `Transcript follows.\n\n======\n\n${await fetchVttText(await getVttUrl().unwrapOr("")).unwrapOr("Transcript not found")}`,
-            createPartFromUri(uploadResult.uri!, uploadResult.mimeType!),
+            `Transcript follows.\n\n======\n\n${vttText}`,
+            createPartFromUri(uploadUri!, uploadMime!),
             SUMMARIZE_PROMPT,
           ]),
         };
         const stream = await context.ai!.models.generateContentStream(input);
 
         for await (const chunk of stream) {
-          console.log(chunk.text);
           store.trigger.update_summary({ chunk: chunk.text! });
         }
-        const tokens = (await context.ai!.models.countTokens(input))
-          .totalTokens!;
+        const tokens = (await context.ai!.models.countTokens(input)).totalTokens!;
         const tokenInfo = `<br /> <br /> Used ${tokens} tokens.`;
         store.trigger.update_summary({ chunk: tokenInfo });
 
-        // Save the complete summary to cache
+        // Save the complete summary to cache, but only if non-empty
         const finalSummary = (context.summary || "") + tokenInfo;
-        saveSummaryToCache(context.video!.videoUrl!, finalSummary);
+        if (finalSummary.trim() && finalSummary.trim() !== tokenInfo.trim()) {
+          saveSummaryToCache(videoUrl, finalSummary);
 
-        // Update cache in store context
-        store.trigger.update_cache({
-          videoUrl: context.video!.videoUrl!,
-          summary: finalSummary,
-        });
+          // Update cache in store context
+          store.trigger.update_cache({
+            videoUrl,
+            summary: finalSummary,
+          });
+        }
       });
 
-      // Reset summary before starting
       return {
         ...context,
         summary: "",
@@ -446,19 +485,18 @@ function SummarizeView() {
     store,
     (state) => state.context.summaryCache,
   );
-  if (!video?.videoUrl) return <div>No video detected</div>;
-  if (!ai) return <div>No API key set</div>;
+  const [generated, setGenerated] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const cachedSummary = video?.videoUrl ? summaryCache[video.videoUrl] : null;
-  const [generated, setGenerated] = useState(!!cachedSummary);
 
   const handleSummaryClick = useCallback((event: React.MouseEvent) => {
     const target = event.target as HTMLElement;
+    event.preventDefault();
     if (
       target.tagName === "A" &&
       target.getAttribute("href")?.match(/^\d+:\d+$/)
     ) {
-      event.preventDefault();
       const timeStr = target.getAttribute("href")!;
       const [minutes, seconds] = timeStr.split(":").map(Number);
       const timestamp = minutes * 60 + seconds;
@@ -466,15 +504,50 @@ function SummarizeView() {
     }
   }, []);
 
+  if (!ai) return <div>No API key set</div>;
+
   return (
     <>
       {!generated ? (
         <>
+          {error && (
+            <InlineAlert variant="negative" marginBottom="size-200">
+              <Content>{error}</Content>
+            </InlineAlert>
+          )}
           <Button
             variant="primary"
-            onPress={() => {
-              setGenerated(true);
-              store.trigger.summarize();
+            onPress={async () => {
+              if (!video?.videoUrl) {
+                // Try to detect video
+                try {
+                  const videoUrl: string = await new Promise((resolve, reject) => {
+                    const extApi = (window as any).browser?.runtime?.sendMessage
+                      ? (window as any).browser
+                      : (window as any).chrome;
+                    extApi.runtime
+                      .sendMessage({ action: "getVideoRequest" })
+                      .then((response: any) => {
+                        if (response?.success && typeof response.data === "string") {
+                          resolve(response.data);
+                        } else {
+                          reject(new Error("No video detected on this page."));
+                        }
+                      })
+                      .catch(reject);
+                  });
+                  store.trigger.set_video_result({ videoUrl, error: null });
+                  setError(null);
+                  setGenerated(true);
+                  store.trigger.summarize();
+                } catch (e: any) {
+                  setError(e?.message || "No video detected on this page.");
+                }
+              } else {
+                setError(null);
+                setGenerated(true);
+                store.trigger.summarize();
+              }
             }}
           >
             Generate AI Summary
@@ -522,7 +595,17 @@ function SummarizeView() {
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <ProgressCircle isIndeterminate />
-          {progressStatus && <span>{progressStatus}</span>}
+          {progressStatus && (
+            <span>
+              {progressStatus}
+              {progressStatus.match(/Loading video \(\d+%\)/) ? "" : (
+                progressStatus.includes("Loading video") &&
+                typeof store.getSnapshot().context.videoProgress === "number"
+                  ? ` (${store.getSnapshot().context.videoProgress}%)`
+                  : ""
+              )}
+            </span>
+          )}
         </div>
       )}
     </>
@@ -589,69 +672,7 @@ function KeyInputView() {
 }
 
 function App() {
-  const video = useSelector(store, (state) => state.context.video);
-  const videoProgress = useSelector(
-    store,
-    (state) => state.context.videoProgress,
-  );
-  const isVideoLoading = useSelector(
-    store,
-    (state) => state.context.isVideoLoading,
-  );
   const ai = useSelector(store, (state) => state.context.ai);
-
-  // Initialize video loading
-  React.useEffect(() => {
-    let mounted = true;
-
-    loadVideoWithProgress((progress) => {
-      if (mounted) {
-        store.trigger.update_video_progress({ progress });
-      }
-    }).then((result) => {
-      if (mounted) {
-        store.trigger.set_video_result({
-          videoUrl: result.videoUrl,
-          error: result.error,
-        });
-      }
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  if (isVideoLoading) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "1rem",
-          padding: "1rem",
-        }}
-      >
-        <ProgressCircle isIndeterminate />
-        <span>Loading video... {videoProgress}%</span>
-      </div>
-    );
-  }
-
-  if (video?.error) {
-    return (
-      <InlineAlert variant="negative">
-        <Heading>No video detected</Heading>
-        <Content>
-          Please load a video. Make sure you are on the page of an Adobe Connect
-          recording for Stanford Online High School.
-          <br />
-          Error: {video.error}
-        </Content>
-      </InlineAlert>
-    );
-  }
-
   return ai ? <AIApp /> : <KeyInputView />;
 }
 
