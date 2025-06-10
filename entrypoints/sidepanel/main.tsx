@@ -24,13 +24,25 @@ import {
 } from "@google/genai";
 import { createStore } from "@xstate/store";
 import { useSelector } from "@xstate/store/react";
-import { useVideo, fetchVideoBlob, loadVideoWithProgress, getVttUrl, fetchVttText } from "../popup/data";
+import {
+  useVideo,
+  fetchVideoBlob,
+  loadVideoWithProgress,
+  getVttUrl,
+  fetchVttText,
+} from "../popup/data";
+import {
+  injectVideoControl,
+  setVideoTime as setVideoTimeInject,
+} from "../lib/video-control";
 
 // Be brief, concise, and straightforward.
 const SUMMARIZE_PROMPT = `
 Summarize this video briefly.
 
 Do not acknowledge the user or this prompt. Respond ONLY with the summary, and no prefix such as "Here is a summary:".
+
+The transcript is also provided, in VTT format. You can use this to aid you in finding timestamps. Keep in mind that the transcript is not the source of truth, as it is not multilingual or perfectly accurate.
 
 Be brief, concise, and straightforward. Target one paragraph for each important aspect. Do not aim to discuss all points, but instead focus on a broad overview.
 
@@ -40,9 +52,15 @@ Indent your paragraphs, keeping HTML whitespace rules in mind.
 
 This is a lecture recording from a class at Stanford Online High School.
 
+
 After your summary, respond with a timeline.
 
-Target 5-15 points per video. Here is an end-to-end example:
+Link to time stamps of each slide displayed. For time stamps, always respond with an accurate MM:SS timestamp.
+
+If slides are not displayed or a separate event occurs, that may also be a valid time stamp + label.
+
+Target 5-15 points per video. Here is an end-to-end example (with made-up labels and timestamps):
+
 ===========
 <h2>Summary</h2>
 
@@ -51,14 +69,32 @@ Target 5-15 points per video. Here is an end-to-end example:
 <br><h2>Timeline</h2>
 
 <ul>
-  <li>Introduction</li>
-  <li>Overview of the course</a></li>
-  <li>Course objectives</a></li>
-  <li>Course structure</a></li>
-  <li>Course materials</a></li>
-  <li>Course evaluation</a></li>
+  <li><a href="0:00">Introduction</a></li>
+  <li><a href="0:17">Overview of the course</a></li>
+  <li><a href="22:00">Course objectives</a></li>
+  <li><a href="34:00">Course structure</a></li>
+  <li><a href="45:59">Course materials</a></li>
+  <li><a href="67:02">Course evaluation</a></li>
 </ul>
-`
+`;
+async function setVideoTimestamp(timestamp: number) {
+  try {
+    const [tab] = await browser.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (tab?.id) {
+      // First inject the video control script
+      await injectVideoControl(tab.id);
+      // Then set the video time
+      const response = await setVideoTimeInject(tab.id, timestamp);
+      return response?.success;
+    }
+  } catch (error) {
+    console.error("Failed to control video:", error);
+  }
+  return false;
+}
 
 async function validateApiKey(apiKey: string): Promise<boolean> {
   try {
@@ -100,11 +136,14 @@ function getCachedSummary(videoUrl: string): string | null {
   return cache[videoUrl] || null;
 }
 
-async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: number) => void): Promise<Blob> {
+async function downscaleVideoTo1fps(
+  videoBlob: Blob,
+  onProgress?: (percent: number) => void,
+): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    const video = document.createElement('video');
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d')!;
+    const video = document.createElement("video");
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d")!;
 
     video.src = URL.createObjectURL(videoBlob);
     video.muted = true;
@@ -124,13 +163,13 @@ async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: numb
       // Combine video stream with full-quality audio
       const combinedStream = new MediaStream([
         ...stream.getVideoTracks(),
-        ...audioDestination.stream.getAudioTracks()
+        ...audioDestination.stream.getAudioTracks(),
       ]);
 
       const mediaRecorder = new MediaRecorder(combinedStream, {
-        mimeType: 'video/webm; codecs=vp8',
+        mimeType: "video/webm; codecs=vp8",
         videoBitsPerSecond: 1000000, // Increased bitrate to 1 Mbps
-        audioBitsPerSecond: 128000 // Full quality audio
+        audioBitsPerSecond: 128000, // Full quality audio
       });
 
       const chunks: Blob[] = [];
@@ -142,14 +181,14 @@ async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: numb
       };
 
       mediaRecorder.onstop = () => {
-        const processedBlob = new Blob(chunks, { type: 'video/webm' });
+        const processedBlob = new Blob(chunks, { type: "video/webm" });
         URL.revokeObjectURL(video.src);
         resolve(processedBlob);
       };
 
       mediaRecorder.onerror = (event) => {
         URL.revokeObjectURL(video.src);
-        throw new Error('MediaRecorder error');
+        throw new Error("MediaRecorder error");
       };
 
       let frameCount = 0;
@@ -168,8 +207,12 @@ async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: numb
         }
 
         // Update progress on the first frame, and then at specified intervals.
-        if (frameCount === 0 || (frameCount > 0 && frameCount % PROGRESS_UPDATE_INTERVAL === 0)) {
-          const percent = totalFrames > 0 ? Math.round((frameCount / totalFrames) * 100) : 0;
+        if (
+          frameCount === 0 ||
+          (frameCount > 0 && frameCount % PROGRESS_UPDATE_INTERVAL === 0)
+        ) {
+          const percent =
+            totalFrames > 0 ? Math.round((frameCount / totalFrames) * 100) : 0;
           onProgress?.(percent);
         }
 
@@ -188,7 +231,7 @@ async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: numb
 
     video.onerror = () => {
       URL.revokeObjectURL(video.src);
-      reject(new Error('Video loading error'));
+      reject(new Error("Video loading error"));
     };
   });
 }
@@ -220,7 +263,10 @@ const store = createStore({
       ...context,
       progressStatus: event.status,
     }),
-    update_progress_with_percent: (context, event: { status: string; percent: number }) => ({
+    update_progress_with_percent: (
+      context,
+      event: { status: string; percent: number },
+    ) => ({
       ...context,
       progressStatus: `${event.status} (${event.percent}%)`,
     }),
@@ -228,7 +274,10 @@ const store = createStore({
       ...context,
       videoProgress: event.progress,
     }),
-    set_video_result: (context, event: { videoUrl: string | null; error: string | null }) => ({
+    set_video_result: (
+      context,
+      event: { videoUrl: string | null; error: string | null },
+    ) => ({
       ...context,
       video: { videoUrl: event.videoUrl, error: event.error },
       isVideoLoading: false,
@@ -301,12 +350,13 @@ const store = createStore({
             ? (window as any).browser
             : (window as any).chrome;
 
-          extApi.runtime.sendMessage({ action: 'getVideoRequest' })
+          extApi.runtime
+            .sendMessage({ action: "getVideoRequest" })
             .then((response: any) => {
-              if (response?.success && typeof response.data === 'string') {
+              if (response?.success && typeof response.data === "string") {
                 resolve(response.data);
               } else {
-                reject(new Error('Failed to get video URL'));
+                reject(new Error("Failed to get video URL"));
               }
             })
             .catch(reject);
@@ -322,7 +372,10 @@ const store = createStore({
         // Downscale video to 1fps
         store.trigger.update_progress({ status: "Downscaling video" });
         const downscaledBlob = await downscaleVideoTo1fps(blob, (percent) => {
-          store.trigger.update_progress_with_percent({ status: "Downscaling video", percent });
+          store.trigger.update_progress_with_percent({
+            status: "Downscaling video",
+            percent,
+          });
         });
 
         // step 1: upload
@@ -334,7 +387,9 @@ const store = createStore({
 
         // step 2: wait until that upload is fully processed by Google
         // (uploadResult.name is "files/…" or just the ID)
-        store.trigger.update_progress({ status: "Waiting for video to become active" });
+        store.trigger.update_progress({
+          status: "Waiting for video to become active",
+        });
         await waitForFileActive(context.ai!, uploadResult.name!);
 
         // step 3: now you can safely call generateContent
@@ -342,17 +397,19 @@ const store = createStore({
         const input = {
           model: "gemini-2.0-flash",
           contents: createUserContent([
+            `Transcript follows.\n\n======\n\n${await fetchVttText(await getVttUrl().unwrapOr("")).unwrapOr("Transcript not found")}`,
             createPartFromUri(uploadResult.uri!, uploadResult.mimeType!),
             SUMMARIZE_PROMPT,
           ]),
-        }
+        };
         const stream = await context.ai!.models.generateContentStream(input);
 
         for await (const chunk of stream) {
           console.log(chunk.text);
           store.trigger.update_summary({ chunk: chunk.text! });
         }
-        const tokens = (await context.ai!.models.countTokens(input)).totalTokens!;
+        const tokens = (await context.ai!.models.countTokens(input))
+          .totalTokens!;
         const tokenInfo = `<br /> <br /> Used ${tokens} tokens.`;
         store.trigger.update_summary({ chunk: tokenInfo });
 
@@ -363,7 +420,7 @@ const store = createStore({
         // Update cache in store context
         store.trigger.update_cache({
           videoUrl: context.video!.videoUrl!,
-          summary: finalSummary
+          summary: finalSummary,
         });
       });
 
@@ -373,76 +430,103 @@ const store = createStore({
         summary: "",
         progressStatus: null,
       };
-    }
+    },
   },
 });
 
 function SummarizeView() {
   let ai = useSelector(store, (state) => state.context.ai);
   const output = useSelector(store, (state) => state.context.summary);
-  const progressStatus = useSelector(store, (state) => state.context.progressStatus);
+  const progressStatus = useSelector(
+    store,
+    (state) => state.context.progressStatus,
+  );
   const video = useSelector(store, (state) => state.context.video);
-  const summaryCache = useSelector(store, (state) => state.context.summaryCache);
+  const summaryCache = useSelector(
+    store,
+    (state) => state.context.summaryCache,
+  );
   if (!video?.videoUrl) return <div>No video detected</div>;
   if (!ai) return <div>No API key set</div>;
 
   const cachedSummary = video?.videoUrl ? summaryCache[video.videoUrl] : null;
   const [generated, setGenerated] = useState(!!cachedSummary);
 
+  const handleSummaryClick = useCallback((event: React.MouseEvent) => {
+    const target = event.target as HTMLElement;
+    if (
+      target.tagName === "A" &&
+      target.getAttribute("href")?.match(/^\d+:\d+$/)
+    ) {
+      event.preventDefault();
+      const timeStr = target.getAttribute("href")!;
+      const [minutes, seconds] = timeStr.split(":").map(Number);
+      const timestamp = minutes * 60 + seconds;
+      setVideoTimestamp(timestamp);
+    }
+  }, []);
 
-
-
-
-
-   return (
-     <>
-       {!generated ? (
-         <>
-           <Button variant="primary" onPress={() => {
-             setGenerated(true);
-             store.trigger.summarize();
-           }}>
-             Generate AI Summary
-           </Button>
-           {cachedSummary && (
-             <Button variant="secondary" onPress={() => {
-               setGenerated(true);
-               // Load cached summary immediately
-               store.trigger.update_summary({ chunk: cachedSummary });
-             }} UNSAFE_style={{ marginLeft: '0.5rem' }}>
-               Load Cached Summary
-             </Button>
-           )}
-         </>
-       ) : (
-       output ? (
-         <>
-           <div
-             dangerouslySetInnerHTML={{ __html: output! }}
-           />
-           <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
-             <Button variant="secondary" onPress={() => {
-               store.trigger.force_regenerate();
-               setGenerated(false);
-             }}>
-               Regenerate
-             </Button>
-             <Button variant="secondary" onPress={() => {
-               store.trigger.clear_cache();
-             }}>
-               Clear All Cache
-             </Button>
-           </div>
-         </>
-       ) : (
-         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-           <ProgressCircle isIndeterminate />
-           {progressStatus && <span>{progressStatus}</span>}
-         </div>
-       )
-     )}
-     </>
-   );
+  return (
+    <>
+      {!generated ? (
+        <>
+          <Button
+            variant="primary"
+            onPress={() => {
+              setGenerated(true);
+              store.trigger.summarize();
+            }}
+          >
+            Generate AI Summary
+          </Button>
+          {cachedSummary && (
+            <Button
+              variant="secondary"
+              onPress={() => {
+                setGenerated(true);
+                // Load cached summary immediately
+                store.trigger.update_summary({ chunk: cachedSummary });
+              }}
+              UNSAFE_style={{ marginLeft: "0.5rem" }}
+            >
+              Load Cached Summary
+            </Button>
+          )}
+        </>
+      ) : output ? (
+        <>
+          <div
+            dangerouslySetInnerHTML={{ __html: output! }}
+            onClick={handleSummaryClick}
+          />
+          <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem" }}>
+            <Button
+              variant="secondary"
+              onPress={() => {
+                store.trigger.force_regenerate();
+                setGenerated(false);
+              }}
+            >
+              Regenerate
+            </Button>
+            <Button
+              variant="secondary"
+              onPress={() => {
+                store.trigger.clear_cache();
+              }}
+            >
+              Clear All Cache
+            </Button>
+          </div>
+        </>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <ProgressCircle isIndeterminate />
+          {progressStatus && <span>{progressStatus}</span>}
+        </div>
+      )}
+    </>
+  );
 }
 
 function AIApp() {
@@ -506,8 +590,14 @@ function KeyInputView() {
 
 function App() {
   const video = useSelector(store, (state) => state.context.video);
-  const videoProgress = useSelector(store, (state) => state.context.videoProgress);
-  const isVideoLoading = useSelector(store, (state) => state.context.isVideoLoading);
+  const videoProgress = useSelector(
+    store,
+    (state) => state.context.videoProgress,
+  );
+  const isVideoLoading = useSelector(
+    store,
+    (state) => state.context.isVideoLoading,
+  );
   const ai = useSelector(store, (state) => state.context.ai);
 
   // Initialize video loading
@@ -522,7 +612,7 @@ function App() {
       if (mounted) {
         store.trigger.set_video_result({
           videoUrl: result.videoUrl,
-          error: result.error
+          error: result.error,
         });
       }
     });
@@ -534,7 +624,14 @@ function App() {
 
   if (isVideoLoading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem' }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "1rem",
+          padding: "1rem",
+        }}
+      >
         <ProgressCircle isIndeterminate />
         <span>Loading video... {videoProgress}%</span>
       </div>
@@ -558,8 +655,6 @@ function App() {
   return ai ? <AIApp /> : <KeyInputView />;
 }
 
-console.log(await fetchVttText(await getVttUrl().unwrapOr("SKIBIDI")).unwrapOr("SKIBIDI2"));
-
 // Mount directly if #root exists (for direct import from index.html)
 const rootElement = document.getElementById("root");
 if (rootElement) {
@@ -568,7 +663,7 @@ if (rootElement) {
       <div style={{ padding: "1rem", height: "100vh" }}>
         <ToastContainer />
         <Suspense>
-        <App />
+          <App />
         </Suspense>
       </div>
     </Provider>,
