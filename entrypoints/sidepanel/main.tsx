@@ -84,6 +84,22 @@ async function getStoredApiKey(): Promise<string | null> {
   return null;
 }
 
+function getSummaryCache(): Record<string, string> {
+  const stored = localStorage.getItem("video_summary_cache");
+  return stored ? JSON.parse(stored) : {};
+}
+
+function saveSummaryToCache(videoUrl: string, summary: string): void {
+  const cache = getSummaryCache();
+  cache[videoUrl] = summary;
+  localStorage.setItem("video_summary_cache", JSON.stringify(cache));
+}
+
+function getCachedSummary(videoUrl: string): string | null {
+  const cache = getSummaryCache();
+  return cache[videoUrl] || null;
+}
+
 async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: number) => void): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
@@ -94,8 +110,8 @@ async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: numb
     video.muted = true;
 
     video.onloadedmetadata = () => {
-      canvas.width = Math.min(video.videoWidth, 320); // Smaller resolution for speed
-      canvas.height = Math.min(video.videoHeight, 240); // Smaller resolution for speed
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
 
       const stream = canvas.captureStream(1); // Higher capture rate for smoother recording
 
@@ -113,7 +129,7 @@ async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: numb
 
       const mediaRecorder = new MediaRecorder(combinedStream, {
         mimeType: 'video/webm; codecs=vp8',
-        videoBitsPerSecond: 100000, // Lower bitrate for faster processing
+        videoBitsPerSecond: 1000000, // Increased bitrate to 1 Mbps
         audioBitsPerSecond: 128000 // Full quality audio
       });
 
@@ -133,21 +149,29 @@ async function downscaleVideoTo1fps(videoBlob: Blob, onProgress?: (percent: numb
 
       mediaRecorder.onerror = (event) => {
         URL.revokeObjectURL(video.src);
-        reject(new Error('MediaRecorder error'));
+        throw new Error('MediaRecorder error');
       };
 
       let frameCount = 0;
       const duration = video.duration;
       const totalFrames = Math.floor(duration / 5); // 1 frame every 5 seconds
+      const PROGRESS_UPDATE_INTERVAL = 10; // Update progress every 10 frames
 
       const drawFrame = () => {
         if (frameCount >= totalFrames) {
+          // Ensure 100% progress is reported if any frames were processed.
+          if (totalFrames > 0) {
+            onProgress?.(100);
+          }
           mediaRecorder.stop();
           return;
         }
 
-        const percent = Math.round((frameCount / totalFrames) * 100);
-        onProgress?.(percent);
+        // Update progress on the first frame, and then at specified intervals.
+        if (frameCount === 0 || (frameCount > 0 && frameCount % PROGRESS_UPDATE_INTERVAL === 0)) {
+          const percent = totalFrames > 0 ? Math.round((frameCount / totalFrames) * 100) : 0;
+          onProgress?.(percent);
+        }
 
         video.currentTime = frameCount * 5; // Jump by 5 seconds
         frameCount++;
@@ -179,6 +203,7 @@ const store = createStore({
     isVideoLoading: true,
     summary: null as string | null,
     progressStatus: null as string | null,
+    summaryCache: getSummaryCache(),
   },
   on: {
     set_api_key: (context, event: { key: string }) => {
@@ -208,9 +233,45 @@ const store = createStore({
       video: { videoUrl: event.videoUrl, error: event.error },
       isVideoLoading: false,
     }),
+    clear_cache: (context) => {
+      localStorage.removeItem("video_summary_cache");
+      return {
+        ...context,
+        summaryCache: {},
+      };
+    },
+    force_regenerate: (context) => {
+      if (context.video?.videoUrl) {
+        const cache = getSummaryCache();
+        delete cache[context.video.videoUrl];
+        localStorage.setItem("video_summary_cache", JSON.stringify(cache));
+      }
+      return {
+        ...context,
+        summary: null,
+        summaryCache: getSummaryCache(),
+      };
+    },
+    update_cache: (context, event: { videoUrl: string; summary: string }) => ({
+      ...context,
+      summaryCache: {
+        ...context.summaryCache,
+        [event.videoUrl]: event.summary,
+      },
+    }),
     summarize: (context, event, enqueue) => {
       if (!context.video?.videoUrl) return context;
       if (!context.ai) return context;
+
+      // Check if we have a cached summary for this video URL
+      const cachedSummary = getCachedSummary(context.video.videoUrl);
+      if (cachedSummary) {
+        return {
+          ...context,
+          summary: cachedSummary,
+          progressStatus: null,
+        };
+      }
 
       enqueue.effect(async () => {
         async function waitForFileActive(
@@ -292,7 +353,18 @@ const store = createStore({
           store.trigger.update_summary({ chunk: chunk.text! });
         }
         const tokens = (await context.ai!.models.countTokens(input)).totalTokens!;
-        store.trigger.update_summary({ chunk: `<br /> <br /> Used ${tokens} tokens.` });
+        const tokenInfo = `<br /> <br /> Used ${tokens} tokens.`;
+        store.trigger.update_summary({ chunk: tokenInfo });
+
+        // Save the complete summary to cache
+        const finalSummary = (context.summary || "") + tokenInfo;
+        saveSummaryToCache(context.video!.videoUrl!, finalSummary);
+
+        // Update cache in store context
+        store.trigger.update_cache({
+          videoUrl: context.video!.videoUrl!,
+          summary: finalSummary
+        });
       });
 
       // Reset summary before starting
@@ -310,9 +382,12 @@ function SummarizeView() {
   const output = useSelector(store, (state) => state.context.summary);
   const progressStatus = useSelector(store, (state) => state.context.progressStatus);
   const video = useSelector(store, (state) => state.context.video);
+  const summaryCache = useSelector(store, (state) => state.context.summaryCache);
   if (!video?.videoUrl) return <div>No video detected</div>;
   if (!ai) return <div>No API key set</div>;
-  const [generated, setGenerated] = useState(false);
+
+  const cachedSummary = video?.videoUrl ? summaryCache[video.videoUrl] : null;
+  const [generated, setGenerated] = useState(!!cachedSummary);
 
 
 
@@ -329,14 +404,35 @@ function SummarizeView() {
            }}>
              Generate AI Summary
            </Button>
+           {cachedSummary && (
+             <Button variant="secondary" onPress={() => {
+               setGenerated(true);
+               // Load cached summary immediately
+               store.trigger.update_summary({ chunk: cachedSummary });
+             }} UNSAFE_style={{ marginLeft: '0.5rem' }}>
+               Load Cached Summary
+             </Button>
+           )}
          </>
        ) : (
        output ? (
-
          <>
            <div
              dangerouslySetInnerHTML={{ __html: output! }}
            />
+           <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+             <Button variant="secondary" onPress={() => {
+               store.trigger.force_regenerate();
+               setGenerated(false);
+             }}>
+               Regenerate
+             </Button>
+             <Button variant="secondary" onPress={() => {
+               store.trigger.clear_cache();
+             }}>
+               Clear All Cache
+             </Button>
+           </div>
          </>
        ) : (
          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
