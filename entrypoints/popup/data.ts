@@ -187,12 +187,12 @@ export async function loadVideoWithProgress(
     const objectUrl = URL.createObjectURL(blob)
     urlCache.set(cleanUrl, objectUrl)
     onProgress(100)
-    
+
     return { videoUrl: objectUrl, error: null }
   } catch (error) {
-    return { 
-      videoUrl: null, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      videoUrl: null,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
@@ -224,4 +224,60 @@ export async function downloadBlobFromUrl(blobUrl: string): Promise<void> {
     console.error("Failed to download blob:", error);
     // Optionally, display an error message to the user here
   }
+}
+
+// MARK: - vtt utilities
+
+export function getVttUrl(): ResultAsync<string, string> {
+  return ResultAsync.fromPromise(
+    (async () => {
+      // support both Firefox and Chrome extensions
+      const extApi = (window as any).browser?.runtime?.sendMessage
+        ? (window as any).browser
+        : (window as any).chrome
+
+      if (!extApi?.runtime?.sendMessage) {
+        throw new Error('Extension API not available')
+      }
+
+      const response = await extApi.runtime.sendMessage({ action: 'getVttRequest' })
+      if (!response?.success || typeof response.data !== 'string') {
+        throw new Error('Failed to get captions URL from extension')
+      }
+
+      return response.data
+    })(),
+    (error) =>
+      error instanceof Error
+        ? error.message
+        : 'Unknown error while fetching video URL'
+  )
+}
+export function fetchVttText(vttUrl: string): ResultAsync<string, string> {
+  return ResultAsync.fromPromise(
+    (async () => {
+      const cleanUrl = trimEncodedQuotes(vttUrl)
+
+      const res = await fetch(cleanUrl, {
+        headers: {
+          accept: '*/*',
+          'cache-control': 'no-cache',
+          pragma: 'no-cache',
+          // ...any other headers you really need...
+        },
+        method: 'GET',
+        referrerPolicy: 'same-origin',
+      })
+      if (!res.ok) {
+        throw new Error(`HTTP error: ${res.status}`)
+      }
+
+      const text = await res.text()
+      return text
+    })(),
+    (error) =>
+      error instanceof Error
+        ? error.message
+        : 'Unknown error while fetching captions text'
+  )
 }

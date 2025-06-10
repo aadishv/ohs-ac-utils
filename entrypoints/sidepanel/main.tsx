@@ -24,7 +24,7 @@ import {
 } from "@google/genai";
 import { createStore } from "@xstate/store";
 import { useSelector } from "@xstate/store/react";
-import { useVideo, fetchVideoBlob, loadVideoWithProgress } from "../popup/data";
+import { useVideo, fetchVideoBlob, loadVideoWithProgress, getVttUrl, fetchVttText } from "../popup/data";
 
 // Be brief, concise, and straightforward.
 const SUMMARIZE_PROMPT = `
@@ -557,6 +557,8 @@ function App() {
 
   return ai ? <AIApp /> : <KeyInputView />;
 }
+
+console.log(await fetchVttText(await getVttUrl().unwrapOr("SKIBIDI")).unwrapOr("SKIBIDI2"));
 
 // Mount directly if #root exists (for direct import from index.html)
 const rootElement = document.getElementById("root");
