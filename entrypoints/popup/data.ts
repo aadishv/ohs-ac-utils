@@ -244,7 +244,6 @@ export function getVttUrl(): ResultAsync<string, string> {
       if (!response?.success || typeof response.data !== 'string') {
         throw new Error('Failed to get captions URL from extension')
       }
-
       return response.data
     })(),
     (error) =>
@@ -256,8 +255,7 @@ export function getVttUrl(): ResultAsync<string, string> {
 export function fetchVttText(vttUrl: string): ResultAsync<string, string> {
   return ResultAsync.fromPromise(
     (async () => {
-      const cleanUrl = trimEncodedQuotes(vttUrl)
-
+      const cleanUrl = trimEncodedQuotes(vttUrl);
       const res = await fetch(cleanUrl, {
         headers: {
           accept: '*/*',
@@ -267,7 +265,7 @@ export function fetchVttText(vttUrl: string): ResultAsync<string, string> {
         },
         method: 'GET',
         referrerPolicy: 'same-origin',
-      })
+      });
       if (!res.ok) {
         throw new Error(`HTTP error: ${res.status}`)
       }

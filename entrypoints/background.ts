@@ -8,8 +8,6 @@ let lastVideoRequestTimestamp: number | null = null;
 
 export default defineBackground(() => {
   console.log("Background script initialized.");
-  console.log('9')
-  console.log('16');
   browser.webRequest.onSendHeaders.addListener(
     (details) => {
       if (details.url.includes(".vtt")) {
@@ -34,7 +32,6 @@ export default defineBackground(() => {
         lastVideoRequestTimestamp &&
         now - lastVideoRequestTimestamp < FIVE_MINUTES
       ) {
-        console.log(lastVideoRequest, "background");
         sendResponse({ success: true, data: lastVideoRequest });
       } else {
         sendResponse({
@@ -54,7 +51,6 @@ export default defineBackground(() => {
         lastVideoRequestTimestamp &&
         now - lastVideoRequestTimestamp < FIVE_MINUTES
       ) {
-        console.log(lastVttRequest, "background");
         sendResponse({ success: true, data: lastVttRequest });
       } else {
         sendResponse({
