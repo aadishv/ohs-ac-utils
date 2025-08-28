@@ -1,2 +1,5 @@
 @import "tailwindcss";
 /* LOL NOTHING HERE */
+* {
+    white-space: 'pre-wrap' !important;
+}

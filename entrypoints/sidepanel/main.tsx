@@ -14,16 +14,20 @@ import {
   Tabs,
   ToastContainer,
 } from "@adobe/react-spectrum";
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../tailwind.css";
 import {
   convertSecondsToHms,
   Entry,
+  key,
   sidepanel,
   useSidepanelState,
 } from "./state";
 import { useSelector } from "@xstate/store/react";
+import * as Icons from "lucide-react";
+import ReactMarkdown from 'react-markdown'
+import { Toaster, toast } from "sonner";
 function Transcript() {
   const vtt = useSelector(sidepanel, (s) => s.context.vtt);
   return vtt === null ? (
@@ -42,38 +46,86 @@ function Transcript() {
     </div>
   );
 }
-
+function KeySelect() {
+  const [showing, setShow] = useState(false);
+  const [keyString, setKeyStr] = useState(key.get());
+  useEffect(() => {
+    setKeyStr(key.get());
+  }, []);
+  const set = () => {
+    key.set(keyString);
+    toast("Saved API key!");
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <Icons.Key className="w-5 h-5 text-gray-500" />
+      <div className="relative flex-1 flex items-center">
+        <input
+          type={showing ? "text" : "password"}
+          placeholder="enter API key"
+          onSubmit={set}
+          value={keyString}
+          onChange={e => setKeyStr(e.target.value)}
+          className="rounded-full px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+        <button
+          type="button"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
+          onClick={() => setShow((s) => !s)}
+          tabIndex={-1}
+          aria-label={showing ? "Hide API key" : "Show API key"}
+        >
+          {showing ? <Icons.EyeOff className="w-4 h-4" /> : <Icons.Eye className="w-4 h-4" />}
+        </button>
+      </div>
+      <Button variant="primary" onPress={set}>save API key</Button>
+    </div>
+  );
+}
 function AIPanel() {
-  return "test";
-  // return ai.running === "unavailable" ? (
-  //   <ProgressBar isIndeterminate />
-  // ) : ai.running === "ready" ? (
-  //   <Button variant="primary" onPress={ai.run}>
-  //     Run AI analysis
-  //   </Button>
-  // ) : (
-  //   <div className="flex flex-col gap-3">
-  //     {ai.running === "working" && (ai.progress === null ? (
-  //       <div className="flex">
-  //         <ProgressCircle size="S" UNSAFE_className="my-auto" isIndeterminate />
-  //         <span className="mx-1 my-auto">Let the AI cook...</span>
-  //       </div>
-  //     ) : (
-  //       <div className="flex flex-col">
-  //         <span>{ai.progress.action}</span>
-  //         <ProgressBar value={ai.progress.prog * 100} />
-  //       </div>
-  //     ))}
-  //     {
-  //       ai.status.isErr() && <InlineAlert variant="negative">
-  //         <Heading>An error occured during analysis</Heading>
-  //         <Content>
-  //           {ai.status.error}
-  //         </Content>
-  //       </InlineAlert>
-  //     }
-  //   </div>
-  // );
+  const state = useSidepanelState();
+  return (
+    <div className="flex flex-col gap-3">
+      <KeySelect />
+      {typeof state.state === "number" ? (
+        <ProgressBar
+          value={state.state >= 0 ? state.state : undefined}
+          isIndeterminate={state.state < 0}
+        />
+      ) : (
+        <Button variant="primary" onPress={() => sidepanel.trigger.run()}>
+          Run AI analysis
+        </Button>
+      )}
+      <div className="flex flex-col gap-3">
+        {typeof state.state === "string" && (
+          <InlineAlert variant="negative">
+            <Heading>An error occured during analysis</Heading>
+            <Content>{state.state}</Content>
+          </InlineAlert>
+        )}
+      </div>
+      <div className="flex flex-col gap-3">
+        {
+          state.topics.map(topic =>
+          <div className="backdrop-brightness-150 p-4 rounded-lg flex flex-col gap-4">
+            <div className="flex italic gap-1">{
+              topic.icon === "question" ? <Icons.CircleQuestionMark /> :
+              topic.icon === "checkmark" ? <Icons.Check /> :
+              topic.icon === "task" ? <Icons.ListChecks /> :
+              topic.icon === "x" ? <Icons.X /> :
+              topic.icon === "bookmark" ? <Icons.Bookmark /> : <></>
+              }</div>
+            <hr />
+            <ReactMarkdown>
+            {topic.content}
+            </ReactMarkdown>
+          </div>
+          )
+        }
+      </div>
+    </div>
+  );
 }
 
 function App() {
@@ -108,6 +160,7 @@ if (rootElement) {
       <ToastContainer />
       <Suspense>
         <App />
+        <Toaster />
       </Suspense>
     </Provider>,
   );

@@ -16,18 +16,24 @@
   },
   "dependencies": {
     "@adobe/react-spectrum": "^3.41.0",
+    "@ai-sdk/google": "^2.0.11",
     "@google/genai": "^1.4.0",
     "@plussub/srt-vtt-parser": "^2.0.5",
     "@tailwindcss/vite": "^4.1.6",
     "@wxt-dev/auto-icons": "^1.0.2",
     "@xstate/store": "^3.6.2",
+    "ai": "^5.0.26",
     "autoprefixer": "^10.4.21",
+    "lucide-react": "^0.542.0",
     "neverthrow": "^8.2.0",
     "postcss": "^8.5.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "sonner": "^2.0.7",
     "tailwindcss": "^4.1.6",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "zod": "^4.1.4"
   },
   "devDependencies": {
     "@types/react": "^19.1.2",
