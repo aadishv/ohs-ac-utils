@@ -17,11 +17,10 @@ import {
 import { Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import "../tailwind.css";
-import { convertSecondsToHms, useTranscript } from "./transcript";
-import { Entry } from "./transcript";
-import { AIRuntime, useAIRuntime } from "./ai";
-
-function Transcript({ vtt }: { vtt: Entry[] | null }) {
+import { convertSecondsToHms, Entry, sidepanel, useSidepanelState } from "./state";
+import { useSelector } from "@xstate/store/react";
+function Transcript() {
+  const vtt = useSelector(sidepanel, s => s.context.vtt);
   return vtt === null ? (
     <ProgressCircle isIndeterminate />
   ) : (
@@ -39,41 +38,41 @@ function Transcript({ vtt }: { vtt: Entry[] | null }) {
   );
 }
 
-function AIPanel({ ai }: { ai: AIRuntime }) {
-  return ai.running === "unavailable" ? (
-    <ProgressBar isIndeterminate />
-  ) : ai.running === "ready" ? (
-    <Button variant="primary" onPress={ai.run}>
-      Run AI analysis
-    </Button>
-  ) : (
-    <div className="flex flex-col gap-3">
-      {ai.running === "working" && (ai.progress === null ? (
-        <div className="flex">
-          <ProgressCircle size="S" UNSAFE_className="my-auto" isIndeterminate />
-          <span className="mx-1 my-auto">Let the AI cook...</span>
-        </div>
-      ) : (
-        <div className="flex flex-col">
-          <span>{ai.progress.action}</span>
-          <ProgressBar value={ai.progress.prog * 100} />
-        </div>
-      ))}
-      {
-        ai.status.isErr() && <InlineAlert variant="negative">
-          <Heading>An error occured during analysis</Heading>
-          <Content>
-            {ai.status.error}
-          </Content>
-        </InlineAlert>
-      }
-    </div>
-  );
+function AIPanel() {
+  return "test";
+  // return ai.running === "unavailable" ? (
+  //   <ProgressBar isIndeterminate />
+  // ) : ai.running === "ready" ? (
+  //   <Button variant="primary" onPress={ai.run}>
+  //     Run AI analysis
+  //   </Button>
+  // ) : (
+  //   <div className="flex flex-col gap-3">
+  //     {ai.running === "working" && (ai.progress === null ? (
+  //       <div className="flex">
+  //         <ProgressCircle size="S" UNSAFE_className="my-auto" isIndeterminate />
+  //         <span className="mx-1 my-auto">Let the AI cook...</span>
+  //       </div>
+  //     ) : (
+  //       <div className="flex flex-col">
+  //         <span>{ai.progress.action}</span>
+  //         <ProgressBar value={ai.progress.prog * 100} />
+  //       </div>
+  //     ))}
+  //     {
+  //       ai.status.isErr() && <InlineAlert variant="negative">
+  //         <Heading>An error occured during analysis</Heading>
+  //         <Content>
+  //           {ai.status.error}
+  //         </Content>
+  //       </InlineAlert>
+  //     }
+  //   </div>
+  // );
 }
 
 function App() {
-  const vtt = useTranscript();
-  const ai = useAIRuntime(vtt);
+  const state = useSidepanelState(true);
   return (
     <div className="p-4 h-full">
       <Tabs aria-label="Choose which mode to use the AI side panel in">
@@ -83,10 +82,10 @@ function App() {
         </TabList>
         <TabPanels>
           <Item key="tc">
-            <Transcript vtt={vtt} />
+            <Transcript />
           </Item>
           <Item key="ai">
-            <AIPanel ai={ai} />
+            <AIPanel />
           </Item>
         </TabPanels>
       </Tabs>

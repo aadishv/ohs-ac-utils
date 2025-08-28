@@ -3,42 +3,18 @@ import { createRoot } from "react-dom/client";
 import {
   Button,
   ButtonGroup,
+  Content,
   defaultTheme,
+  Heading,
+  InlineAlert,
+  ProgressBar,
   ProgressCircle,
   Provider,
 } from "@adobe/react-spectrum";
-import { useVideo, downloadBlobFromUrl } from "./data";
-
-type VideoState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "success"; url: string }
-  | { status: "error"; error: string };
+import { useVideo } from "./data";
 
 export function VideoPlayer() {
-  const [state, setState] = useState<VideoState>({ status: "idle" });
-  const objectUrlRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-      }
-    };
-  }, []);
-
-  const handleLoadVideo = () => {
-    setState({ status: "loading" });
-    useVideo().match(
-      (url) => {
-        objectUrlRef.current = url;
-        setState({ status: "success", url });
-      },
-      (errMsg) => {
-        setState({ status: "error", error: errMsg });
-      },
-    );
-  };
+  const state = useVideo();
   const openSidePanel = () => {
     browser.windows.getCurrent().then((win) => {
       browser.sidePanel
@@ -48,12 +24,10 @@ export function VideoPlayer() {
         .catch((err) => console.error(err));
     });
   };
-  if (state.status === "idle") {
+  if (state === null) {
     return (
       <div style={{display: "flex", flexDirection: "column", gap: "1rem"}}>
-      <Button variant="accent" onPress={handleLoadVideo}>
-        Load Video
-      </Button>
+        <span className="opacity-70">waiting for video to get detected... if it's been a while, try refreshing.</span>
         <Button variant="secondary" onPress={openSidePanel}>
         Open AI Panel
       </Button>
@@ -61,15 +35,26 @@ export function VideoPlayer() {
     );
   }
 
-  if (state.status === "loading") return <div style={{paddingTop: "auto", paddingBottom: "auto"}}>Loading…</div>;
-  if (state.status === "error") return <div style={{paddingTop: "auto", paddingBottom: "auto"}}>Error: {state.error}</div>;
-  if (state.status === "success")
+  if (state.status === "working") return <div style={{paddingTop: "auto", paddingBottom: "auto"}}>
+    <ProgressBar value={state.progress} />
+  </div>;
+  if (state.status === "error") return <div style={{paddingTop: "auto", paddingBottom: "auto"}}>
+    <InlineAlert variant="negative">
+      <Heading>Error occured during data fetching</Heading>
+      <Content>
+        {state.error}
+      </Content>
+    </InlineAlert>
+  </div>;
+  if (state.status === "done")
     return (
+      // TODO: reimplement
+      // see https://stackoverflow.com/questions/72474057/how-to-use-url-createobjecturl-inside-a-manifest-v3-extension-serviceworker
       <div>
-        <video controls src={state.url} style={{ width: "100%" }} />
+        <video controls src={state.objectUrl} style={{ width: "100%" }} />
         <Button
           variant="primary"
-          onPress={() => downloadBlobFromUrl(state.url)}
+          // onPress={() => downloadBlobFromUrl(state.url)}
           UNSAFE_style={{marginTop: "1rem"}}
         >
           Download Video
