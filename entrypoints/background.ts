@@ -2,7 +2,7 @@ import { defineBackground } from "#imports";
 import { Err, Ok, Result, ResultAsync } from "neverthrow";
 import { useState } from "react";
 import { browser } from "wxt/browser";
-import { getVideoFromDB, loadVideo, VideoStatus } from "./db";
+import { getVideoFromDB, loadVideo, VideoStatus } from "./lib/db";
 
 export const VIDEO_PORT = "ohs-ac-utils-video";
 

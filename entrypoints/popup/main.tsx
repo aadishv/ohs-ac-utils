@@ -11,7 +11,7 @@ import {
   ProgressCircle,
   Provider,
 } from "@adobe/react-spectrum";
-import { useVideo } from "../db";
+import { useVideo } from "../lib/db";
 import "../tailwind.css";
 export function VideoPlayer() {
   const state = useVideo();

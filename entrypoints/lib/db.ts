@@ -1,6 +1,6 @@
 import { ResultAsync } from "neverthrow";
 import { useState, useRef, useEffect } from "react";
-import { VIDEO_PORT } from "./background";
+import { VIDEO_PORT } from "../background";
 
 const DB_NAME = "ohs-ac-utils-db";
 const DB_VERSION = 1;
@@ -192,3 +192,4 @@ export function useVideo(): VideoStatus {
 
   return status;
 }
+export default defineUnlistedScript(() => { });
