@@ -11,8 +11,8 @@ import {
   ProgressCircle,
   Provider,
 } from "@adobe/react-spectrum";
-import { useVideo } from "./data";
-
+import { useVideo } from "../db";
+import "../tailwind.css";
 export function VideoPlayer() {
   const state = useVideo();
   const openSidePanel = () => {
@@ -26,7 +26,7 @@ export function VideoPlayer() {
   };
   if (state === null) {
     return (
-      <div style={{display: "flex", flexDirection: "column", gap: "1rem"}}>
+      <div className="flex flex-col gap-4">
         <span className="opacity-70">waiting for video to get detected... if it's been a while, try refreshing.</span>
         <Button variant="secondary" onPress={openSidePanel}>
         Open AI Panel
@@ -35,10 +35,11 @@ export function VideoPlayer() {
     );
   }
 
-  if (state.status === "working") return <div style={{paddingTop: "auto", paddingBottom: "auto"}}>
+  if (state.status === "working") return <div className="h-full">
+    Downloading video...
     <ProgressBar value={state.progress} />
   </div>;
-  if (state.status === "error") return <div style={{paddingTop: "auto", paddingBottom: "auto"}}>
+  if (state.status === "error") return <div className="h-full py-auto">
     <InlineAlert variant="negative">
       <Heading>Error occured during data fetching</Heading>
       <Content>
@@ -51,11 +52,13 @@ export function VideoPlayer() {
       // TODO: reimplement
       // see https://stackoverflow.com/questions/72474057/how-to-use-url-createobjecturl-inside-a-manifest-v3-extension-serviceworker
       <div>
-        <video controls src={state.objectUrl} style={{ width: "100%" }} />
+        <video controls src={state.obj} className="w-full rounded-lg" />
         <Button
           variant="primary"
           // onPress={() => downloadBlobFromUrl(state.url)}
-          UNSAFE_style={{marginTop: "1rem"}}
+          UNSAFE_style={{
+            marginTop: "1rem"
+          }}
         >
           Download Video
         </Button>
@@ -70,9 +73,9 @@ const rootElement = document.getElementById("root");
 if (rootElement) {
   createRoot(rootElement).render(
     <Provider theme={defaultTheme}>
-      <div style={{padding: "1rem"}}>
+      <div className="p-4">
         <VideoPlayer />
       </div>
-    </Provider>,
+    </Provider>
   );
 }
