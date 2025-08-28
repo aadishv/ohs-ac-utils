@@ -72,7 +72,7 @@ function AIPanel() {
 }
 
 function App() {
-  const state = useSidepanelState(true);
+  const state = useSidepanelState();
   return (
     <div className="p-4 h-full">
       <Tabs aria-label="Choose which mode to use the AI side panel in">
