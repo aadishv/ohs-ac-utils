@@ -17,10 +17,15 @@ import {
 import { Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import "../tailwind.css";
-import { convertSecondsToHms, Entry, sidepanel, useSidepanelState } from "./state";
+import {
+  convertSecondsToHms,
+  Entry,
+  sidepanel,
+  useSidepanelState,
+} from "./state";
 import { useSelector } from "@xstate/store/react";
 function Transcript() {
-  const vtt = useSelector(sidepanel, s => s.context.vtt);
+  const vtt = useSelector(sidepanel, (s) => s.context.vtt);
   return vtt === null ? (
     <ProgressCircle isIndeterminate />
   ) : (

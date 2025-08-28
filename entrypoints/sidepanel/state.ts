@@ -121,7 +121,8 @@ const setupSubscriber = () => {
       const vtt = (new Ok(msg.obj) as Result<string, string>)
         .map((vtt) =>
           Result.fromThrowable(parse)(vtt).map((parsed) => parsed.entries),
-        ).andThen(v => v)
+        )
+        .andThen((v) => v)
         .map((entries) => {
           return entries.flatMap((e) => {
             const { text, ...rest } = e;
@@ -132,10 +133,11 @@ const setupSubscriber = () => {
               text,
             }));
           });
-        }).map((entries) => {
+        })
+        .map((entries) => {
           let newEntries: Entry[] = [];
           let currentEntry = entries[0];
-          entries = entries.slice(1)
+          entries = entries.slice(1);
           for (const entry of entries) {
             if (entry.speaker !== currentEntry.speaker) {
               currentEntry.id = v7();
@@ -154,5 +156,5 @@ const setupSubscriber = () => {
       }
     }
   });
-}
+};
 setupSubscriber();

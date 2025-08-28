@@ -30,7 +30,8 @@ export function VideoPlayer() {
       {state === null && (
         <>
           <span className="opacity-70">
-            waiting for video to get detected... if it's been a while, try refreshing.
+            waiting for video to get detected... if it's been a while, try
+            refreshing.
           </span>
         </>
       )}
@@ -43,9 +44,7 @@ export function VideoPlayer() {
       {state && state.status === "error" && (
         <InlineAlert variant="negative">
           <Heading>Error occured during data fetching</Heading>
-          <Content>
-            {state.error}
-          </Content>
+          <Content>{state.error}</Content>
         </InlineAlert>
       )}
       {state && state.status === "done" && (
@@ -61,12 +60,13 @@ export function VideoPlayer() {
           </Button>
         </>
       )}
-      {state?.status !== "working" && <Button variant="secondary" onPress={openSidePanel}>
-        Open AI Panel
-      </Button>}
+      {state?.status !== "working" && (
+        <Button variant="secondary" onPress={openSidePanel}>
+          Open AI Panel
+        </Button>
+      )}
     </div>
   );
-
 }
 
 const rootElement = document.getElementsByTagName("body")[0];
@@ -76,6 +76,6 @@ if (rootElement) {
       <div className="p-4">
         <VideoPlayer />
       </div>
-    </Provider>
+    </Provider>,
   );
 }

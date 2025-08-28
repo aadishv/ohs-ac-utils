@@ -150,7 +150,7 @@ export const loadVideo = async (
       progress(100);
       const arrayBuffer = await blob.arrayBuffer();
       setVideoInDB(url, arrayBuffer);
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 300));
       set({
         status: "done",
         obj: url,

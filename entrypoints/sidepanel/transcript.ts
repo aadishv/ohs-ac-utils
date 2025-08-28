@@ -4,7 +4,6 @@ import { v7 } from "uuid";
 import { getVttUrl, fetchVttText } from "../popup/data";
 import { Result } from "neverthrow";
 
-
 function useAsyncValue<T>(value: () => Promise<T>): T | null {
   const [state, setState] = useState<T | null>(null);
 
@@ -22,6 +21,4 @@ function useAsyncValue<T>(value: () => Promise<T>): T | null {
   return state;
 }
 
-export const useTranscript = () => useAsyncValue(async () => {
-
-});
+export const useTranscript = () => useAsyncValue(async () => {});
