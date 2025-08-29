@@ -20,14 +20,15 @@ import "../tailwind.css";
 import {
   convertSecondsToHms,
   Entry,
-  key,
   sidepanel,
   useSidepanelState,
 } from "./state";
+import { key } from "./ai";
 import { useSelector } from "@xstate/store/react";
 import * as Icons from "lucide-react";
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown from "react-markdown";
 import { Toaster, toast } from "sonner";
+import { useVideo } from "../lib/db";
 function Transcript() {
   const vtt = useSelector(sidepanel, (s) => s.context.vtt);
   return vtt === null ? (
@@ -55,7 +56,7 @@ function KeySelect() {
   const set = () => {
     key.set(keyString);
     toast("Saved API key!");
-  }
+  };
   return (
     <div className="flex items-center gap-2">
       <Icons.Key className="w-5 h-5 text-gray-500" />
@@ -65,27 +66,37 @@ function KeySelect() {
           placeholder="enter API key"
           onSubmit={set}
           value={keyString}
-          onChange={e => setKeyStr(e.target.value)}
-          className="rounded-full px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+          onChange={(e) => setKeyStr(e.target.value)}
+          className="rounded-full px-2 py-1 mr-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
         <button
           type="button"
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
+          className=""
           onClick={() => setShow((s) => !s)}
           tabIndex={-1}
           aria-label={showing ? "Hide API key" : "Show API key"}
         >
-          {showing ? <Icons.EyeOff className="w-4 h-4" /> : <Icons.Eye className="w-4 h-4" />}
+          {showing ? (
+            <Icons.EyeOff className="w-4 h-4" />
+          ) : (
+            <Icons.Eye className="w-4 h-4" />
+          )}
         </button>
       </div>
-      <Button variant="primary" onPress={set}>save API key</Button>
+      <Button variant="primary" onPress={set}>
+        save API key
+      </Button>
     </div>
   );
 }
 function AIPanel() {
   const state = useSidepanelState();
+  const video = useVideo();
   return (
     <div className="flex flex-col gap-3">
+      {/*<video src={video?.status === "done" ? video.obj : ""} controls className="w-full rounded-lg mb-4" id="main-vid" />*/}
+      <div id="main-video">
+      </div>
       <KeySelect />
       {typeof state.state === "number" ? (
         <ProgressBar
@@ -93,7 +104,10 @@ function AIPanel() {
           isIndeterminate={state.state < 0}
         />
       ) : (
-        <Button variant="primary" onPress={() => sidepanel.trigger.run()}>
+        <Button
+          variant="primary"
+          onPress={() => sidepanel.trigger.run({ video })}
+        >
           Run AI analysis
         </Button>
       )}
@@ -106,23 +120,27 @@ function AIPanel() {
         )}
       </div>
       <div className="flex flex-col gap-3">
-        {
-          state.topics.map(topic =>
+        {state.topics.map((topic) => (
           <div className="backdrop-brightness-150 p-4 rounded-lg flex flex-col gap-4">
-            <div className="flex italic gap-1">{
-              topic.icon === "question" ? <Icons.CircleQuestionMark /> :
-              topic.icon === "checkmark" ? <Icons.Check /> :
-              topic.icon === "task" ? <Icons.ListChecks /> :
-              topic.icon === "x" ? <Icons.X /> :
-              topic.icon === "bookmark" ? <Icons.Bookmark /> : <></>
-              }</div>
+            <div className="flex italic gap-1">
+              {topic.icon === "question" ? (
+                <Icons.CircleQuestionMark />
+              ) : topic.icon === "checkmark" ? (
+                <Icons.Check />
+              ) : topic.icon === "task" ? (
+                <Icons.ListChecks />
+              ) : topic.icon === "x" ? (
+                <Icons.X />
+              ) : topic.icon === "bookmark" ? (
+                <Icons.Bookmark />
+              ) : (
+                <></>
+              )}
+            </div>
             <hr />
-            <ReactMarkdown>
-            {topic.content}
-            </ReactMarkdown>
+            <ReactMarkdown>{topic.content}</ReactMarkdown>
           </div>
-          )
-        }
+        ))}
       </div>
     </div>
   );
