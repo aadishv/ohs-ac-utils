@@ -1,14 +1,6 @@
-import { useEffect, useState } from "react";
-import { Err, Ok, Result, ResultAsync } from "neverthrow";
-import { createStore } from "@xstate/store";
-import { parse } from "@plussub/srt-vtt-parser";
-import { v7 } from "uuid";
 import { useSelector } from "@xstate/store/react";
-import { FetchStatus } from "../lib/db";
-import { VTT_PORT } from "../background";
-import { json, z } from "zod";
-import { generateText, stepCountIs, streamText, tool } from "ai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createStore } from "@xstate/store";
+import { z } from "zod";
 import { cache, runAI } from "./ai";
 
 export function convertSecondsToHms(totalSeconds: number): string {
@@ -47,23 +39,16 @@ export const sidepanel = createStore({
     state: null as null | number | string,
   },
   on: {
-    updateVtt: (context, { vtt }: { vtt: Entry[] }) => {
-      return {
-        ...context,
-        vtt,
-        topics: context.topics.length === 0 ? cache.get(vtt) : context.topics,
-      };
-    },
-    _updateTopics: (context, { topics }: { topics: Topic[] }, enqueue) => {
+    _updateTopics: (context, { topics }: { topics: Topic[] }) => {
       return { ...context, topics };
     },
-    _addTopics: (context, { topic }: { topic: Topic }, enqueue) => {
+    _addTopics: (context, { topic }: { topic: Topic }) => {
       return { ...context, topics: [...context.topics, topic] };
     },
     _updateState: (context, { state }: { state: null | number | string }) => {
       return { ...context, state };
     },
-    run: (context, { video }: { video: FetchStatus }) => {
+    run: (context, { videoUrl, vtt }: { videoUrl: string, vtt: Entry[] | null }) => {
       let topics = context.topics;
       void runAI(
         (state: number | null | string) =>
@@ -81,8 +66,8 @@ export const sidepanel = createStore({
             return topics;
           },
         },
-        context.vtt,
-        video,
+        vtt,
+        videoUrl,
       );
     },
   },
@@ -92,94 +77,3 @@ export const useSidepanelState = () => {
   const state = useSelector(sidepanel, (s) => s.context);
   return state;
 };
-// export const useAIRuntime = (vtt: Entry[] | null): AIRuntime => {
-//   const [running, setRunning] = useState("ready" as "ready" | "working" | "done");
-//   if (vtt == null) {
-//     return {
-//       running: "unavailable",
-//     }
-//   }
-
-//   if (running !== "ready") {
-//     return {
-//       running,
-//       status: new Err("Invalid API key"),
-//       progress: {
-//         action: "Doing something...",
-//         prog: 0.5,
-//       },
-//     }
-//   } else {
-//     return {
-//       running,
-//       run() {
-//         setRunning("working");
-//         setTimeout(() => {
-//           setRunning("done");
-//         }, 4000);
-//       }
-//     }
-//   }
-// }
-const setupSubscriber = () => {
-  const port = browser.runtime.connect({ name: VTT_PORT });
-
-  port.onMessage.addListener(async (msg: FetchStatus) => {
-    const parseSpeakerText = (
-      input: string,
-    ): { speaker: string; text: string }[] => {
-      const regex = /@:@\s*([^@]+?)\s*@:@\s*([^@]+?)(?=(?:\s*@:@|$))/g;
-      const results: { speaker: string; text: string }[] = [];
-      let match: RegExpExecArray | null;
-      while ((match = regex.exec(input)) !== null) {
-        results.push({
-          speaker: match[1].trim(),
-          text: match[2].trim(),
-        });
-      }
-      if (results.length === 0) {
-        return [{ speaker: "", text: input.trim() }];
-      }
-      return results;
-    };
-    if (msg?.status === "done") {
-      const vtt = (new Ok(msg.obj) as Result<string, string>)
-        .map((vtt) =>
-          Result.fromThrowable(parse)(vtt).map((parsed) => parsed.entries),
-        )
-        .andThen((v) => v)
-        .map((entries) => {
-          return entries.flatMap((e) => {
-            const { text, ...rest } = e;
-            const parsed = parseSpeakerText(text);
-            return parsed.map(({ speaker, text }) => ({
-              ...rest,
-              speaker,
-              text,
-            }));
-          });
-        })
-        .map((entries) => {
-          let newEntries: Entry[] = [];
-          let currentEntry = entries[0];
-          entries = entries.slice(1);
-          for (const entry of entries) {
-            if (entry.speaker !== currentEntry.speaker) {
-              currentEntry.id = v7();
-              newEntries.push(currentEntry);
-              currentEntry = entry;
-            } else {
-              currentEntry.text += ` ${entry.text}`;
-              currentEntry.to = entry.to;
-            }
-          }
-          newEntries.push(currentEntry);
-          return newEntries;
-        });
-      if (vtt.isOk()) {
-        sidepanel.trigger.updateVtt({ vtt: vtt.value });
-      }
-    }
-  });
-};
-setupSubscriber();

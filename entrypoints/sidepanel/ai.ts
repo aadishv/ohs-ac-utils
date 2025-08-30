@@ -3,7 +3,6 @@ import { streamText, tool, stepCountIs } from "ai";
 import z from "zod";
 import { sidepanel, Topic, topic_validator, Entry } from "./state";
 import fetchFrame from "./frames";
-import { FetchStatus } from "../lib/db";
 import getFetcher from "./frames";
 
 export const key = {
@@ -91,12 +90,12 @@ export const runAI = async (state: (v: number | string | null) => void, topics: 
   add: (t: Topic) => void;
   clear: () => void;
   get: () => Topic[];
-}, vtt: Entry[] | null, video: FetchStatus) => {
+}, vtt: Entry[] | null, videoUrl: string | null) => {
   if (!vtt) {
     state("Transcript hasn't loaded yet. Try reloading?");
     return;
   }
-  if (video?.status !== "done") {
+  if (!videoUrl) {
     state("No video detected. Try reloading?");
     return;
   }
@@ -135,7 +134,7 @@ export const runAI = async (state: (v: number | string | null) => void, topics: 
   //     }
   //   }
   // } catch {}
-  const fetcher = await getFetcher(video.obj);
+  const fetcher = await getFetcher(videoUrl);
   const dataUrl = (await fetcher._unsafeUnwrap().fetch(600))._unsafeUnwrap();
 const img = document.createElement("img");
   img.src = dataUrl;

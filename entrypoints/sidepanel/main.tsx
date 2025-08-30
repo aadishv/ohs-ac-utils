@@ -24,16 +24,28 @@ import {
   useSidepanelState,
 } from "./state";
 import { key } from "./ai";
-import { useSelector } from "@xstate/store/react";
 import * as Icons from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Toaster, toast } from "sonner";
-import { useVideo } from "../lib/db";
-import Chat, { useLocalChat } from "./ai2";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useCurrentUrls, useVideoQuery, useVttQuery } from "./hooks";
+
+const queryClient = new QueryClient();
+
 function Transcript() {
-  const vtt = useSelector(sidepanel, (s) => s.context.vtt);
-  return vtt === null ? (
-    <ProgressCircle isIndeterminate />
+  const { vttUrl } = useCurrentUrls();
+  const { data: vtt, isLoading, isError, error } = useVttQuery(vttUrl);
+
+  if (isLoading) {
+    return <ProgressCircle isIndeterminate />;
+  }
+
+  if (isError) {
+    return <InlineAlert variant="negative"><Heading>Error loading transcript</Heading><Content>{error.message}</Content></InlineAlert>
+  }
+
+  return vtt === null || vtt === undefined ? (
+    <p>No transcript found.</p>
   ) : (
     <div>
       {vtt.map((entry) => (
@@ -48,6 +60,7 @@ function Transcript() {
     </div>
   );
 }
+
 function KeySelect() {
   const [showing, setShow] = useState(false);
   const [keyString, setKeyStr] = useState(key.get());
@@ -90,13 +103,32 @@ function KeySelect() {
     </div>
   );
 }
+
 function AIPanel() {
   const state = useSidepanelState();
-  const video = useVideo();
+  const { videoUrl, vttUrl } = useCurrentUrls();
+  const { data: video, isLoading: isVideoLoading } = useVideoQuery(videoUrl);
+  const { data: vtt, isLoading: isVttLoading } = useVttQuery(vttUrl);
+
+  useEffect(() => {
+    if (video) {
+      const videoElement = document.createElement('video');
+      videoElement.src = video;
+      videoElement.controls = true;
+      videoElement.className = "w-full rounded-lg mb-4";
+      const container = document.getElementById("main-video");
+      if(container) {
+        container.innerHTML = '';
+        container.appendChild(videoElement);
+      }
+    }
+  }, [video]);
+
   return (
     <div className="flex flex-col gap-3">
-      {/*<video src={video?.status === "done" ? video.obj : ""} controls className="w-full rounded-lg mb-4" id="main-vid" />*/}
-      <div id="main-video"></div>
+      <div id="main-video">
+        {isVideoLoading && <ProgressCircle isIndeterminate />}
+      </div>
       <KeySelect />
       {typeof state.state === "number" ? (
         <ProgressBar
@@ -106,7 +138,12 @@ function AIPanel() {
       ) : (
         <Button
           variant="primary"
-          onPress={() => sidepanel.trigger.run({ video })}
+          onPress={() => {
+            if (videoUrl && vtt) {
+              sidepanel.trigger.run({ videoUrl, vtt });
+            }
+          }}
+          isDisabled={isVttLoading || isVideoLoading || !videoUrl || !vtt}
         >
           Run AI analysis
         </Button>
@@ -147,8 +184,6 @@ function AIPanel() {
 }
 
 function App() {
-  const state = useSidepanelState();
-  const chat = useLocalChat();
   return (
     <div className="h-full">
       <Tabs
@@ -164,7 +199,7 @@ function App() {
             <Transcript />
           </Item>
           <Item key="ai">
-            <Chat {...chat} />
+            <AIPanel />
           </Item>
         </TabPanels>
       </Tabs>
@@ -179,11 +214,13 @@ if (rootElement) {
       UNSAFE_className="w-[100vw] h-[100vh] fixed overflow-y-scroll"
       theme={defaultTheme}
     >
-      <ToastContainer />
-      <Suspense>
-        <App />
-        <Toaster />
-      </Suspense>
+      <QueryClientProvider client={queryClient}>
+        <ToastContainer />
+        <Suspense>
+          <App />
+          <Toaster />
+        </Suspense>
+      </QueryClientProvider>
     </Provider>,
   );
 }
