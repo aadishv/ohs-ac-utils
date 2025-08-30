@@ -16,7 +16,7 @@ import {
   PromptInputToolbar,
   PromptInputTools,
 } from "@/components/prompt-input";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { Response } from "@/components/response";
 import { GlobeIcon, Send, SquareStop, StopCircle, X } from "lucide-react";
@@ -37,12 +37,29 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import z from "zod";
 import { useSelector } from "@xstate/store/react";
 import { sidepanel } from "./state";
-import { convertToModelMessages, streamText } from "ai";
+import {
+  ChatRequestOptions,
+  convertFileListToFileUIParts,
+  convertToModelMessages,
+  createUIMessageStream,
+  InferUIMessageChunk,
+  ModelMessage,
+  readUIMessageStream,
+  stepCountIs,
+  streamText,
+  tool,
+  UIDataTypes,
+  UIMessage,
+  UITools,
+} from "ai";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button, ProgressCircle, TextArea } from "@adobe/react-spectrum";
 import Markdown from "react-markdown";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import getFetcher, { FrameFetcher } from "./frames";
+import { useVideo } from "../lib/db";
+import { listToReadableStream, wrapAsyncGenerator } from "../lib/stream";
 
 const system = `
 <role>
@@ -68,23 +85,124 @@ The transcript may say: "Pocks are known as man's best friend," where the first 
 </important>
 `;
 
-const ChatBotDemo = () => {
+export const useLocalChat = () => {
   const vtt = useSelector(sidepanel, (s) => s.context.vtt);
-  const [input, setInput] = useState("");
-  const [webSearch, setWebSearch] = useState(false);
-  const { messages, sendMessage, status } = useChat({
+  const video = useVideo();
+  const [fetcher, setFetcher] = useState<FrameFetcher | null>(null);
+
+  useEffect(() => {
+    const loadFetcher = async () => {
+      if (video?.status === "done") {
+        const result = await getFetcher(video.obj).unwrapOr(null);
+        setFetcher(result);
+      } else {
+        setFetcher(null);
+      }
+    };
+
+    loadFetcher();
+  }, [video]);
+
+  // useEffect(() => {
+  //   if (video?.status === "done") {
+  //     void getFetcher(video.obj).map(fetcher => fetcher.fetch(0)).map(console.log);
+  //   }
+  // }, [video]);
+  type AgentMsg = InferUIMessageChunk<UIMessage<unknown, UIDataTypes, UITools>>;
+  async function* run(
+    options: {
+      trigger: "submit-message" | "regenerate-message";
+      chatId: string;
+      messageId: string | undefined;
+      messages: UIMessage<unknown, UIDataTypes, UITools>[];
+      abortSignal: AbortSignal | undefined;
+    } & ChatRequestOptions,
+  ): AsyncGenerator<AgentMsg> {
+    const google = createGoogleGenerativeAI({
+      apiKey: key.get(),
+    });
+    // agentic loop
+    let messages: ModelMessage[] = convertToModelMessages(options.messages);
+    while (true) {
+      let calls: {
+        timestamp: number;
+        show: boolean;
+      }[] = [];
+      const stream = streamText({
+        model: google("gemini-2.5-flash-lite"),
+        system: `<transcript>${JSON.stringify(vtt)}</transcript>\n ${system}`,
+        messages,
+        tools: {
+          getFrame: tool({
+            description:
+              "Get the frame of the lecture at a specific timestamp. Can be called multiple times.",
+            inputSchema: z.object({
+              timestamp: z.number().describe("timestamp in seconds"),
+              show: z
+                .boolean()
+                .describe("whether to show the result to the user"),
+            }),
+            execute: async (call) => {
+              calls.push(call);
+              return "Tool has been called; if you'd like to see output, end the turn.";
+            },
+          }),
+        },
+        abortSignal: options.abortSignal,
+        stopWhen: stepCountIs(5),
+      });
+      let _parts: AgentMsg[] = [];
+
+      for await (const part of stream.toUIMessageStream()) {
+        _parts.push(part);
+        yield part;
+        console.log(part);
+      }
+      let uiParts: UIMessage[] = [];
+      for await (const part of readUIMessageStream({
+        stream: listToReadableStream(_parts),
+      })) {
+        uiParts.push(part);
+      }
+      messages = messages.concat(convertToModelMessages(uiParts));
+      if (calls.length === 0) {
+        break;
+      }
+      for (const call of calls) {
+        if (fetcher) {
+          const url = await fetcher.fetch(call.timestamp);
+          if (url.isOk()) {
+            messages.push({
+              role: "user",
+              content: [
+                {
+                  type: "image",
+                  image: url.value,
+                },
+              ],
+            });
+          }
+          const stream = createUIMessageStream({
+            async execute({ writer }) {
+              writer.merge(listToReadableStream([{
+                role: "user",
+                content: [
+                  {
+                    type: "image",
+                    image: url.value,
+                  },
+                ],
+              }]));
+            },
+          });
+        }
+      }
+    }
+  }
+  return useChat({
     transport: {
       async sendMessages(options) {
-        const google = createGoogleGenerativeAI({
-          apiKey: key.get(),
-        });
-        const stream = streamText({
-          model: google("gemini-2.5-flash-lite"),
-          system: `<transcript>${JSON.stringify(vtt)}</transcript>\n ${system}`,
-          messages: convertToModelMessages(options.messages),
-          abortSignal: options.abortSignal,
-        });
-        return stream.toUIMessageStream();
+        return wrapAsyncGenerator(run)(options);
       },
       // obviously not needed
       async reconnectToStream(_) {
@@ -125,7 +243,7 @@ const Chat = ({
                         </Markdown>
                       );
                     default:
-                      return null;
+                      return JSON.stringify(part);
                   }
                 })}
               </MessageContent>
