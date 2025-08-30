@@ -47,7 +47,6 @@ export default defineBackground(() => {
       ) {
         url = details.url;
         void loadCaptions(details.url, (v) => {
-          console.log(v);
           vtt = v;
           for (const p of vttPorts) {
             p.postMessage(vtt);

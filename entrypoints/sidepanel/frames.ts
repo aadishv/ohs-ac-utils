@@ -21,15 +21,12 @@ export default function getFetcher(
       .map(async (video) =>
         ResultAsync.fromPromise(
           new Promise<HTMLVideoElement>((resolve, reject) => {
-            console.log("promise init");
             const controller = new AbortController();
             const onLoaded = () => {
               controller.abort();
-              console.log("YOOO");
               resolve(video);
             };
             const onError = (e: any) => {
-              console.log(e);
               controller.abort();
               reject(new Error("Could not load video"));
             };
@@ -56,7 +53,6 @@ export default function getFetcher(
                   ? Math.max(0, Math.min(timestamp, video.duration))
                   : Math.max(0, timestamp);
               video.currentTime = time;
-              console.log(video);
               await ResultAsync.fromPromise(
                 new Promise<void>((resolve, reject) => {
                   const controller = new AbortController();
@@ -93,3 +89,26 @@ export default function getFetcher(
   );
   // seek
 }
+
+
+export const parseTimeToSeconds = (timeString: string): number => {
+  const parts = timeString.split(':').map(Number);
+
+  if (parts.some(isNaN)) {
+    throw new Error(`Invalid time string format: "${timeString}". Contains non-numeric parts.`);
+  }
+
+  let hours = 0;
+  let minutes = 0;
+  let seconds = 0;
+
+  if (parts.length === 3) {
+    [hours, minutes, seconds] = parts;
+  } else if (parts.length === 2) {
+    [minutes, seconds] = parts;
+  } else {
+    throw new Error(`Invalid time string format: "${timeString}". Expected HH:MM:SS or MM:SS.`);
+  }
+
+  return (hours * 3600) + (minutes * 60) + seconds;
+};
