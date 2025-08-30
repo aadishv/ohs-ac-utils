@@ -29,7 +29,7 @@ import * as Icons from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Toaster, toast } from "sonner";
 import { useVideo } from "../lib/db";
-import ChatBotDemo from "./ai2";
+import Chat, { useLocalChat } from "./ai2";
 function Transcript() {
   const vtt = useSelector(sidepanel, (s) => s.context.vtt);
   return vtt === null ? (
@@ -148,6 +148,7 @@ function AIPanel() {
 
 function App() {
   const state = useSidepanelState();
+  const chat = useLocalChat();
   return (
     <div className="h-full">
       <Tabs
@@ -163,7 +164,7 @@ function App() {
             <Transcript />
           </Item>
           <Item key="ai">
-            <ChatBotDemo />
+            <Chat {...chat} />
           </Item>
         </TabPanels>
       </Tabs>

@@ -2,7 +2,7 @@ import { okAsync, ResultAsync } from "neverthrow";
 
 // hand-rewritten from gpt-5 mini boilerplate
 // https://github.com/copilot/share/40370196-0864-84b4-b102-d64a80770817
-type FrameFetcher = {
+export type FrameFetcher = {
   fetch: (timestamp: number) => ResultAsync<string, string>;
 };
 export default function getFetcher(

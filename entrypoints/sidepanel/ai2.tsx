@@ -92,6 +92,15 @@ const ChatBotDemo = () => {
       },
     },
   });
+};
+
+const Chat = ({
+  messages,
+  sendMessage,
+  status,
+  setMessages,
+}: ReturnType<typeof useLocalChat>) => {
+  const [input, setInput] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,7 +143,7 @@ const ChatBotDemo = () => {
             className="border-2 size-full px-2 border-blue-500 rounded-2xl transition-all duration-300"
             value={input}
           />
-          <PromptInputToolbar className="">
+          <PromptInputToolbar className="gap-2">
             <Button
               type="submit"
               variant="primary"
@@ -151,6 +160,15 @@ const ChatBotDemo = () => {
                 <Send />
               )}
             </Button>
+            <Button
+              variant="negative"
+              onPress={() => {
+                setMessages([]);
+              }}
+              UNSAFE_style={{ minHeight: "100%", borderWidth: 2 }}
+            >
+              Clear chat
+            </Button>
           </PromptInputToolbar>
         </div>
         <div>
@@ -166,4 +184,4 @@ const ChatBotDemo = () => {
   );
 };
 
-export default ChatBotDemo;
+export default Chat;
