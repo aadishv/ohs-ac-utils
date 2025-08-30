@@ -51,9 +51,11 @@ Answer questions about the recorded class discussion given the transcript.
 </role>
 <formatting>
 Always use headings level 1 and 2, never levels 3-6.
+Avoid Markdown block quotes or syntax unique to Github-flavored Markdown.
+LaTeX is available.
 </formatting>
 <verbosity>
-Minimize verbosity. For generic questions give a brief overview (<100 words) and no more. For specific questions only answer with relevant information.
+Minimize verbosity. For generic questions give a brief overview (<100 words) and no more. For specific questions only answer with relevant information. Try to map things to the lowest common denominator -- if the intent is a summary, don't go through every point, instead focusing on the most salient topics.
 </verbosity>
 <errors>
 This transcript contains multiple errors, which you need to account for.
@@ -78,7 +80,7 @@ const ChatBotDemo = () => {
         });
         const stream = streamText({
           model: google("gemini-2.5-flash-lite"),
-          system: `${system}\n <transcript>${JSON.stringify(vtt)}</transcript>`,
+          system: `<transcript>${JSON.stringify(vtt)}</transcript>\n ${system}`,
           messages: convertToModelMessages(options.messages),
           abortSignal: options.abortSignal,
         });
@@ -99,44 +101,66 @@ const ChatBotDemo = () => {
     }
   };
   return (
-    <div className="max-w-4xl mx-auto p-6 relative min-h-full border">
-        <Conversation className="h-full">
-          <ConversationContent>
-            {messages.map((message) => (
-              <div key={message.id}>
-                <Message from={message.role} key={message.id}>
-                  <MessageContent className="backdrop-brightness-125 p-4 rounded-xl">
-                    {message.parts.map((part, i) => {
-                      switch (part.type) {
-                        case "text":
-                          return (
-                            <Markdown key={`${message.id}-${i}`}>
-                              {part.text}
-                            </Markdown>
-                          );
-                        default:
-                          return null;
-                      }
-                    })}
-                  </MessageContent>
-                </Message>
-              </div>
-            ))}
-          </ConversationContent>
-        </Conversation>
-      <PromptInput onSubmit={handleSubmit} className="mt-4 flex flex-row">
-        <input onChange={e => setInput(e.target.value)} className="border-2 w-full min-h-full my-2 px-2 border-blue-500 rounded-full" value={input} />
-        <PromptInputToolbar className="">
-          <Button type="submit" variant="primary" isDisabled={!input}>
-            {status === 'submitted' ? (
-              <ProgressCircle size="S" isIndeterminate />
-            ) : status === 'streaming' ? (
-              <StopCircle className="size-6" />
-            ) : status === 'error' ? (
-              <X className="size-6" />
-            ) : <Send />}
-          </Button>
-        </PromptInputToolbar>
+    <div className="max-w-4xl mx-auto relative h-full flex flex-col min-h-0">
+      <Conversation className="flex-1 overflow-y-auto min-h-0">
+        <ConversationContent>
+          {messages.map((message) => (
+            <Message from={message.role} key={message.id}>
+              <MessageContent className="backdrop-brightness-125 p-4 rounded-xl">
+                {message.parts.map((part, i) => {
+                  switch (part.type) {
+                    case "text":
+                      return (
+                        <Markdown key={`${message.id}-${i}`}>
+                          {part.text}
+                        </Markdown>
+                      );
+                    default:
+                      return null;
+                  }
+                })}
+              </MessageContent>
+            </Message>
+          ))}
+        </ConversationContent>
+      </Conversation>
+      <PromptInput
+        onSubmit={handleSubmit}
+        className="mt-4 flex flex-col z-10 gap-2"
+      >
+        <div className="flex flex-row border-0 gap-2">
+          <input
+            onChange={(e) => setInput(e.target.value)}
+            className="border-2 size-full px-2 border-blue-500 rounded-2xl transition-all duration-300"
+            value={input}
+          />
+          <PromptInputToolbar className="">
+            <Button
+              type="submit"
+              variant="primary"
+              UNSAFE_style={{ minHeight: "100%", borderWidth: 2 }}
+              isDisabled={!input}
+            >
+              {status === "submitted" ? (
+                <ProgressCircle size="S" isIndeterminate />
+              ) : status === "streaming" ? (
+                <StopCircle className="size-6" />
+              ) : status === "error" ? (
+                <X className="size-6" />
+              ) : (
+                <Send />
+              )}
+            </Button>
+          </PromptInputToolbar>
+        </div>
+        <div>
+          <p>
+            <b>Disclaimer:</b> AC AI can make mistakes. Do not trust it for
+            information. The developer does not hold responsibility for any
+            damages caused by the AI's responses.
+          </p>
+          <p>Closing the sidepanel will permanently clear chat history.</p>
+        </div>
       </PromptInput>
     </div>
   );

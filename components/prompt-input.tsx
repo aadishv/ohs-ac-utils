@@ -1,32 +1,29 @@
-'use client';
+"use client";
 
-import { Button } from '@adobe/react-spectrum';
+import { Button } from "@adobe/react-spectrum";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils';
-import type { ChatStatus } from 'ai';
-import { Loader2Icon, SendIcon, SquareIcon, XIcon } from 'lucide-react';
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import type { ChatStatus } from "ai";
+import { Loader2Icon, SendIcon, SquareIcon, XIcon } from "lucide-react";
 import type {
   ComponentProps,
   HTMLAttributes,
   KeyboardEventHandler,
-} from 'react';
-import { Children } from 'react';
+} from "react";
+import { Children } from "react";
 
 export type PromptInputProps = HTMLAttributes<HTMLFormElement>;
 
 export const PromptInput = ({ className, ...props }: PromptInputProps) => (
   <form
-    className={cn(
-      'w-full divide-y overflow-hidden rounded-xl',
-      className
-    )}
+    className={cn("w-full divide-y overflow-hidden rounded-xl", className)}
     {...props}
   />
 );
@@ -39,13 +36,13 @@ export type PromptInputTextareaProps = ComponentProps<typeof Textarea> & {
 export const PromptInputTextarea = ({
   onChange,
   className,
-  placeholder = 'What would you like to know?',
+  placeholder = "What would you like to know?",
   minHeight = 48,
   maxHeight = 164,
   ...props
 }: PromptInputTextareaProps) => {
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       // Don't submit if IME composition is in progress
       if (e.nativeEvent.isComposing) {
         return;
@@ -68,10 +65,10 @@ export const PromptInputTextarea = ({
   return (
     <Textarea
       className={cn(
-        'w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0',
-        'field-sizing-content max-h-[6lh] bg-transparent dark:bg-transparent',
-        'focus-visible:ring-0',
-        className
+        "w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0",
+        "field-sizing-content max-h-[6lh] bg-transparent dark:bg-transparent",
+        "focus-visible:ring-0",
+        className,
       )}
       name="message"
       onChange={(e) => {
@@ -91,7 +88,7 @@ export const PromptInputToolbar = ({
   ...props
 }: PromptInputToolbarProps) => (
   <div
-    className={cn('flex items-center justify-between p-1', className)}
+    className={cn("flex items-center justify-between", className)}
     {...props}
   />
 );
@@ -104,9 +101,9 @@ export const PromptInputTools = ({
 }: PromptInputToolsProps) => (
   <div
     className={cn(
-      'flex items-center gap-1',
-      '[&_button:first-child]:rounded-bl-xl',
-      className
+      "flex items-center gap-1",
+      "[&_button:first-child]:rounded-bl-xl",
+      className,
     )}
     {...props}
   />
@@ -125,19 +122,16 @@ export const PromptInputSubmit = ({
 }: PromptInputSubmitProps) => {
   let Icon = <SendIcon className="size-4" />;
 
-  if (status === 'submitted') {
+  if (status === "submitted") {
     Icon = <Loader2Icon className="size-4 animate-spin" />;
-  } else if (status === 'streaming') {
+  } else if (status === "streaming") {
     Icon = <SquareIcon className="size-4" />;
-  } else if (status === 'error') {
+  } else if (status === "error") {
     Icon = <XIcon className="size-4" />;
   }
 
   return (
-    <Button
-      type="submit"
-      {...props}
-    >
+    <Button type="submit" {...props}>
       {children ?? Icon}
     </Button>
   );
@@ -159,9 +153,9 @@ export const PromptInputModelSelectTrigger = ({
 }: PromptInputModelSelectTriggerProps) => (
   <SelectTrigger
     className={cn(
-      'border-none bg-transparent font-medium text-muted-foreground shadow-none transition-colors',
+      "border-none bg-transparent font-medium text-muted-foreground shadow-none transition-colors",
       'hover:bg-accent hover:text-foreground [&[aria-expanded="true"]]:bg-accent [&[aria-expanded="true"]]:text-foreground',
-      className
+      className,
     )}
     {...props}
   />

@@ -6,9 +6,9 @@ import { v7 } from "uuid";
 import { useSelector } from "@xstate/store/react";
 import { FetchStatus } from "../lib/db";
 import { VTT_PORT } from "../background";
-import { json, z } from 'zod';
-import { generateText, stepCountIs, streamText, tool } from 'ai';
-import {createGoogleGenerativeAI} from '@ai-sdk/google';
+import { json, z } from "zod";
+import { generateText, stepCountIs, streamText, tool } from "ai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { cache, runAI } from "./ai";
 
 export function convertSecondsToHms(totalSeconds: number): string {
@@ -28,7 +28,13 @@ export type Entry = {
   to: number;
 };
 export const topic_validator = z.object({
-  icon: z.union([z.literal("question"), z.literal("x"), z.literal("task"), z.literal("checkmark"), z.literal("bookmark")]),
+  icon: z.union([
+    z.literal("question"),
+    z.literal("x"),
+    z.literal("task"),
+    z.literal("checkmark"),
+    z.literal("bookmark"),
+  ]),
   content: z.string(),
 });
 export type Topic = z.infer<typeof topic_validator>;
@@ -42,7 +48,11 @@ export const sidepanel = createStore({
   },
   on: {
     updateVtt: (context, { vtt }: { vtt: Entry[] }) => {
-      return { ...context, vtt, topics: context.topics.length === 0 ? cache.get(vtt) : context.topics };
+      return {
+        ...context,
+        vtt,
+        topics: context.topics.length === 0 ? cache.get(vtt) : context.topics,
+      };
     },
     _updateTopics: (context, { topics }: { topics: Topic[] }, enqueue) => {
       return { ...context, topics };
@@ -56,7 +66,8 @@ export const sidepanel = createStore({
     run: (context, { video }: { video: FetchStatus }) => {
       let topics = context.topics;
       void runAI(
-        (state: number | null | string) => sidepanel.trigger._updateState({ state }),
+        (state: number | null | string) =>
+          sidepanel.trigger._updateState({ state }),
         {
           add(topic: Topic) {
             topics.push(topic);
@@ -68,12 +79,12 @@ export const sidepanel = createStore({
           },
           get() {
             return topics;
-          }
+          },
         },
         context.vtt,
-        video
+        video,
       );
-    }
+    },
   },
 });
 

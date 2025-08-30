@@ -19,6 +19,6 @@ export default defineConfig({
   },
   modules: ["@wxt-dev/auto-icons"],
   vite: () => ({
-    plugins: [tailwindcss()]
+    plugins: [tailwindcss()],
   }),
 });

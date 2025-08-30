@@ -96,8 +96,7 @@ function AIPanel() {
   return (
     <div className="flex flex-col gap-3">
       {/*<video src={video?.status === "done" ? video.obj : ""} controls className="w-full rounded-lg mb-4" id="main-vid" />*/}
-      <div id="main-video">
-      </div>
+      <div id="main-video"></div>
       <KeySelect />
       {typeof state.state === "number" ? (
         <ProgressBar
@@ -150,21 +149,21 @@ function AIPanel() {
 function App() {
   const state = useSidepanelState();
   return (
-    <div className="p-4 h-full">
-      <Tabs aria-label="Choose which mode to use the AI side panel in">
+    <div className="h-full">
+      <Tabs
+        aria-label="Choose which mode to use the AI side panel in"
+        UNSAFE_style={{ height: "100vh", padding: "1rem" }}
+      >
         <TabList UNSAFE_className="mb-4">
           <Item key="ai">AI</Item>
           <Item key="tc">Transcript</Item>
         </TabList>
-        <TabPanels>
+        <TabPanels UNSAFE_style={{ height: "100%" }}>
           <Item key="tc">
             <Transcript />
           </Item>
           <Item key="ai">
-            <div className="!h-full border border-blue-500">
-            {/*<AIPanel />*/}
             <ChatBotDemo />
-            </div>
           </Item>
         </TabPanels>
       </Tabs>
