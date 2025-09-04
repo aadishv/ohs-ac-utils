@@ -19,19 +19,16 @@ import { createRoot } from "react-dom/client";
 import "../tailwind.css";
 import {
   convertSecondsToHms,
-  Entry,
-  sidepanel,
-  useSidepanelState,
-} from "./state";
-import { key } from "./ai";
+  useCaptions,
+} from "../lib/caption";
 import { useSelector } from "@xstate/store/react";
 import * as Icons from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Toaster, toast } from "sonner";
-import { useVideo } from "../lib/db";
-import Chat, { useLocalChat } from "./ai2";
+import { useVideo } from "../lib/video";
+import Chat, { useLocalChat, key } from "./ai2";
 function Transcript() {
-  const vtt = useSelector(sidepanel, (s) => s.context.vtt);
+  const vtt = useCaptions();
   return vtt === null ? (
     <ProgressCircle isIndeterminate />
   ) : (
@@ -90,64 +87,8 @@ function KeySelect() {
     </div>
   );
 }
-function AIPanel() {
-  const state = useSidepanelState();
-  const video = useVideo();
-  return (
-    <div className="flex flex-col gap-3">
-      {/*<video src={video?.status === "done" ? video.obj : ""} controls className="w-full rounded-lg mb-4" id="main-vid" />*/}
-      <div id="main-video"></div>
-      <KeySelect />
-      {typeof state.state === "number" ? (
-        <ProgressBar
-          value={state.state >= 0 ? state.state : undefined}
-          isIndeterminate={state.state < 0}
-        />
-      ) : (
-        <Button
-          variant="primary"
-          onPress={() => sidepanel.trigger.run({ video })}
-        >
-          Run AI analysis
-        </Button>
-      )}
-      <div className="flex flex-col gap-3">
-        {typeof state.state === "string" && (
-          <InlineAlert variant="negative">
-            <Heading>An error occured during analysis</Heading>
-            <Content>{state.state}</Content>
-          </InlineAlert>
-        )}
-      </div>
-      <div className="flex flex-col gap-3">
-        {state.topics.map((topic) => (
-          <div className="backdrop-brightness-150 p-4 rounded-lg flex flex-col gap-4">
-            <div className="flex italic gap-1">
-              {topic.icon === "question" ? (
-                <Icons.CircleQuestionMark />
-              ) : topic.icon === "checkmark" ? (
-                <Icons.Check />
-              ) : topic.icon === "task" ? (
-                <Icons.ListChecks />
-              ) : topic.icon === "x" ? (
-                <Icons.X />
-              ) : topic.icon === "bookmark" ? (
-                <Icons.Bookmark />
-              ) : (
-                <></>
-              )}
-            </div>
-            <hr />
-            <ReactMarkdown>{topic.content}</ReactMarkdown>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function App() {
-  const state = useSidepanelState();
   const chat = useLocalChat();
   return (
     <div className="h-full">

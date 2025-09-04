@@ -1,79 +1,25 @@
 import { defineBackground } from "#imports";
-import { Err, Ok, Result, ResultAsync } from "neverthrow";
-import { useState } from "react";
 import { browser } from "wxt/browser";
-import { getVideoFromDB, loadVideo, FetchStatus, loadCaptions } from "./lib/db";
-
-export const VIDEO_PORT = "ohs-ac-utils-video";
-export const VTT_PORT = "ohs-ac-utils-captions";
+import { loadCaptions } from "./lib/caption";
+import { loadVideo } from "./lib/video";
 
 export default defineBackground(() => {
-  console.log("Background script initialized.");
-  let video: FetchStatus = null;
-  let vtt: FetchStatus = null;
-  // most recently fetched URL from VTT. this is needed externally since
-  // VTT URL isn't directly encapsulated in FetchStatus
-  let url: string | null = null;
-  // MARK: - port setup
-  const videoPorts = new Set<Browser.runtime.Port>();
-  browser.runtime.onConnect.addListener((p) => {
-    if (p.name !== VIDEO_PORT) return;
-    videoPorts.add(p);
-    if (video !== null) {
-      p.postMessage(video);
-    }
-    p.onDisconnect.addListener(() => {
-      videoPorts.delete(p);
-    });
-  });
-  const vttPorts = new Set<Browser.runtime.Port>();
-  browser.runtime.onConnect.addListener((p) => {
-    if (p.name !== VTT_PORT) return;
-    vttPorts.add(p);
-    if (vtt !== null) {
-      p.postMessage(vtt);
-    }
-    p.onDisconnect.addListener(() => {
-      vttPorts.delete(p);
-    });
-  });
+  console.log("Initializing background script...")
+  // db.videos.clear();
+  // db.tabToVid.clear();
   // MARK: - request listeners
   browser.webRequest.onSendHeaders.addListener(
     (details) => {
+      if (details.tabId < 0) return;
       if (
-        details.url.includes(".vtt") &&
-        (vtt === null || vtt?.status === "error" || vtt?.status === "done") &&
-        true
+        details.url.includes(".vtt")
       ) {
-        url = details.url;
-        void loadCaptions(details.url, (v) => {
-          vtt = v;
-          for (const p of vttPorts) {
-            p.postMessage(vtt);
-          }
-        });
+        void loadCaptions(details);
       }
       if (
-        details.url.includes("video.mp4") &&
-        (video === null ||
-          video?.status === "error" ||
-          (video?.status === "done" && video.obj !== details.url))
+        details.url.includes("video.mp4")
       ) {
-        const url = details.url.split("?")[0];
-
-        void loadVideo(
-          url,
-          details.url,
-          (v: FetchStatus) => {
-            video = v;
-            for (const p of videoPorts) {
-              p.postMessage(video);
-            }
-          },
-          () => {
-            return video;
-          },
-        );
+        void loadVideo(details);
       }
     },
     { urls: ["<all_urls>"] },

@@ -39,20 +39,32 @@ import {
   ReasoningTrigger,
 } from "@/components/reasoning";
 import { Loader } from "@/components/loader";
-import { key } from "./ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import z from "zod";
 import { useSelector } from "@xstate/store/react";
-import { convertSecondsToHms, sidepanel } from "./state";
 import { convertToModelMessages, FileUIPart, streamText, tool } from "ai";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button, ProgressCircle, TextArea } from "@adobe/react-spectrum";
 import Markdown from "react-markdown";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useVideo } from "../lib/db";
+import { useVideo } from "../lib/video";
 import getFetcher, { FrameFetcher, parseTimeToSeconds } from "./frames";
 import { v7 } from "uuid";
+import { convertSecondsToHms, useCaptions } from "../lib/caption";
+
+export const key = {
+  get: (): string => {
+    if (!localStorage.getItem("apiKey")) {
+      localStorage.setItem("apiKey", "");
+      return "";
+    }
+    return localStorage.getItem("apiKey")!;
+  },
+  set: (value: string) => {
+    localStorage.setItem("apiKey", value);
+  },
+};
 
 const system = `
 <role>
@@ -82,15 +94,13 @@ Avoid saying you cannot do something. Think hard and find a way to do it using y
 `;
 
 export const useLocalChat = () => {
-  const vtt = useSelector(sidepanel, (s) => s.context.vtt);
+  const vtt = useCaptions();
   const video = useVideo();
   const [fetcher, setFetcher] = useState<FrameFetcher | null>(null);
   useEffect(() => {
     if (video?.status === "done") {
-      console.log("here");
       void (async () => {
         const newFetcher = (await getFetcher(video.obj)).unwrapOr(null);
-        console.log(newFetcher);
         setFetcher((f) => {
           if (f !== null) return f;
           else {
@@ -246,7 +256,6 @@ const Chat = ({
             <Message from={message.role} key={message.id}>
               <MessageContent className="backdrop-brightness-125 p-4 rounded-xl">
                 {message.parts.map((part, i) => {
-                  console.log(part);
                   switch (part.type) {
                     case "text":
                       return (

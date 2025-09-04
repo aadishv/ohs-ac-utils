@@ -11,8 +11,11 @@ import {
   ProgressCircle,
   Provider,
 } from "@adobe/react-spectrum";
-import { useVideo } from "../lib/db";
+import { useVideo } from "../lib/video";
 import "../tailwind.css";
+
+
+
 export function VideoPlayer() {
   const state = useVideo();
 
@@ -38,7 +41,7 @@ export function VideoPlayer() {
       {state && state.status === "working" && (
         <>
           Downloading video...
-          <ProgressBar value={state.progress} />
+          <ProgressBar value={state.progress} isIndeterminate={state.progress < 0} />
         </>
       )}
       {state && state.status === "error" && (
