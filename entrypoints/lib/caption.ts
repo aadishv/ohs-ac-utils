@@ -137,6 +137,21 @@ export function useCaptions(): Entry[] | null {
       },
       [id],
     );
+    useEffect(() => {
+      const interval = setInterval(async () => {
+        const tabs = await browser.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        const newId = tabs[0].id ?? null;
+        if (!newId) return;
+        const caps = await db.captions.where("id").equals(newId).first() ?? null;
+        if (caps?.contents?.status === "done" || !result) {
+          setId(newId);
+        }
+      }, 5000);
+      return () => clearInterval(interval);
+    }, []);
     return result ?? null;
 }
 export async function getCaptions(): Promise<Entry[] | null> {

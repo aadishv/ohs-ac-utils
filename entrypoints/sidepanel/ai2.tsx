@@ -1,7 +1,7 @@
 import { Conversation, ConversationContent } from "@/components/conversation";
 import { Message, MessageContent } from "@/components/message";
 import { PromptInput, PromptInputToolbar } from "@/components/prompt-input";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { Image, Send } from "lucide-react";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
@@ -9,12 +9,9 @@ import z from "zod";
 import { convertToModelMessages, FileUIPart, streamText, tool } from "ai";
 import {
   Button,
-  ComboBox,
   Content,
   Heading,
   InlineAlert,
-  Item,
-  Picker,
   ProgressCircle,
 } from "@adobe/react-spectrum";
 import Markdown from "react-markdown";
@@ -22,8 +19,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useVideo } from "../lib/video";
 import getFetcher, { FrameFetcher, parseTimeToSeconds } from "./frames";
 import { convertSecondsToHms, getCaptions, useCaptions } from "../lib/caption";
-import { db, Entry } from "../lib/db2";
-import { useLiveQuery } from "dexie-react-hooks";
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+
 
 export const key = {
   get: (): string => {
@@ -190,6 +189,7 @@ export const useLocalChat = () => {
       }
     })();
   }, [calls]);
+  console.log(vtt);
   return {
     ...chat,
     vttAvailable: vtt !== null,
@@ -235,7 +235,7 @@ const Chat = ({
           <ProgressCircle isIndeterminate />
           <p>
             Waiting for transcript to load. If it's been a while, try reloading
-            the page.
+            the page. Make sure you're on the page of the lecture recording.
           </p>
         </>
       ) : (
@@ -255,7 +255,8 @@ const Chat = ({
                       switch (part.type) {
                         case "text":
                           return (
-                            <Markdown key={`${message.id}-${i}`}>
+                            <Markdown key={`${message.id}-${i}`} remarkPlugins={[remarkMath]}
+                                  rehypePlugins={[rehypeKatex]}>
                               {part.text}
                             </Markdown>
                           );
@@ -287,8 +288,9 @@ const Chat = ({
           </Conversation>
           <PromptInput
             onSubmit={handleSubmit}
-            className="pt-4 flex flex-col z-10 h-34 gap-2"
+            className="pt-4 flex flex-col z-10 h-40 gap-2"
           >
+            <hr />
             <div className="flex flex-row border-0 gap-2">
               <input
                 onChange={(e) => setInput(e.target.value)}
@@ -321,7 +323,7 @@ const Chat = ({
               </PromptInputToolbar>
             </div>
             <div className="text-xs">
-              <p>AC AI can make mistakes.</p>
+              <p>AC AI can make mistakes. Closing the sidepanel will permanently clear chat history.</p>
               <b>Context status:</b>
               <div className="flex gap-2">
                 <p className="flex gap-2">

@@ -1,28 +1,19 @@
 import {
   Badge,
-  Button,
-  Content,
-  defaultTheme,
-  Heading,
-  InlineAlert,
-  Item,
-  ProgressBar,
-  ProgressCircle,
+  Button, defaultTheme, Item,
+  Link, ProgressCircle,
   Provider,
   TabList,
   TabPanels,
   Tabs,
-  ToastContainer,
+  ToastContainer, Well
 } from "@adobe/react-spectrum";
 import { Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../tailwind.css";
 import { convertSecondsToHms, useCaptions } from "../lib/caption";
-import { useSelector } from "@xstate/store/react";
 import * as Icons from "lucide-react";
-import ReactMarkdown from "react-markdown";
 import { Toaster, toast } from "sonner";
-import { useVideo } from "../lib/video";
 import Chat, { useLocalChat, key } from "./ai2";
 function Transcript() {
   const vtt = useCaptions();
@@ -53,34 +44,76 @@ function KeySelect() {
     toast("Saved API key!");
   };
   return (
-    <div className="flex items-center gap-2">
-      <Icons.Key className="w-5 h-5 text-gray-500" />
-      <div className="relative flex-1 flex items-center">
-        <input
-          type={showing ? "text" : "password"}
-          placeholder="enter API key"
-          onSubmit={set}
-          value={keyString}
-          onChange={(e) => setKeyStr(e.target.value)}
-          className="rounded-full px-2 py-1 mr-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
-        />
-        <button
-          type="button"
-          className=""
-          onClick={() => setShow((s) => !s)}
-          tabIndex={-1}
-          aria-label={showing ? "Hide API key" : "Show API key"}
-        >
-          {showing ? (
-            <Icons.EyeOff className="w-4 h-4" />
-          ) : (
-            <Icons.Eye className="w-4 h-4" />
-          )}
-        </button>
+      <div className="mb-4">
+        <Well>
+        <p className="mb-2">
+          To use the AI features, you need to provide a Gemini API key from
+          Google AI Studio. Follow these steps:
+        </p>
+        <ol className="list-decimal list-inside mb-2">
+          <li>
+            Go to{" "}
+            <Link
+              href="https://ai.studio/"
+              target="_blank"
+            >
+              https://ai.studio/
+            </Link>
+          </li>
+          <li>Open the sidebar, click on Dashboard &gt; API keys</li>
+          <li>
+            Click "Create API key" and paste the result into the field below
+          </li>
+        </ol>
+        <p className="text-sm">
+          I never view your API key, and all requests are directly forwarded to
+          Google servers.
+        </p>
+        <p className="text-sm">
+          <Link
+            href="https://ai.google.dev/gemini-api/terms"
+            target="_blank"
+          >
+            Gemini API Additional Terms of Service
+          </Link>
+          {" | "}
+          <Link
+            href="https://aadishv.github.io/ohs-ac-privacy/"
+            target="_blank"
+          >
+            OHS AC Utils Privacy Policy
+          </Link>
+        </p>
+        </Well>
+      <div className="flex items-center gap-2 mt-4">
+        <Icons.Key className="w-5 h-5 text-gray-500" />
+        <div className="relative flex-1 flex items-center">
+          <input
+            type={showing ? "text" : "password"}
+            placeholder="enter API key"
+            onSubmit={set}
+            value={keyString}
+            onChange={(e) => setKeyStr(e.target.value)}
+            className="rounded-full px-2 py-1 mr-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+          <button
+            type="button"
+            className=""
+            onClick={() => setShow((s) => !s)}
+            tabIndex={-1}
+            aria-label={showing ? "Hide API key" : "Show API key"}
+          >
+            {showing ? (
+              <Icons.EyeOff className="w-4 h-4" />
+            ) : (
+              <Icons.Eye className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+        <Button variant="primary" onPress={set}>
+          save API key
+        </Button>
       </div>
-      <Button variant="primary" onPress={set}>
-        save API key
-      </Button>
     </div>
   );
 }

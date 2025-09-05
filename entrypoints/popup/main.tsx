@@ -14,8 +14,6 @@ import {
 import { useVideo } from "../lib/video";
 import "../tailwind.css";
 
-
-
 export function VideoPlayer() {
   const state = useVideo();
 
@@ -33,15 +31,19 @@ export function VideoPlayer() {
       {state === null && (
         <>
           <span className="opacity-70">
-            waiting for video to get detected... if it's been a while, try
-            refreshing.
+            Waiting for video to get detected. If it's been a while, try
+            reloading the page. Make sure you're on the page of the lecture
+            recording.
           </span>
         </>
       )}
       {state && state.status === "working" && (
         <>
           Downloading video...
-          <ProgressBar value={state.progress} isIndeterminate={state.progress < 0} />
+          <ProgressBar
+            value={state.progress}
+            isIndeterminate={state.progress < 0}
+          />
         </>
       )}
       {state && state.status === "error" && (
@@ -75,7 +77,10 @@ export function VideoPlayer() {
 const rootElement = document.getElementById("root");
 if (rootElement) {
   createRoot(rootElement).render(
-    <Provider theme={defaultTheme} UNSAFE_style={{width: "100%", height: "100%", minWidth: "320px"}}>
+    <Provider
+      theme={defaultTheme}
+      UNSAFE_style={{ width: "100%", height: "100%", minWidth: "320px" }}
+    >
       <div className="p-4 size-full">
         <VideoPlayer />
       </div>
