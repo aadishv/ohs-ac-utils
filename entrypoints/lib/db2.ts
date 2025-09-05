@@ -23,14 +23,20 @@ export type Entry = {
   to: number;
 };
 const db = new Dexie("ohs_ac_utils") as Dexie & {
-  videos: EntityTable<{
-    url: string;
-    data: ArrayBuffer;
-  }, "url">;
-  captions: EntityTable<{
-    id: number;
-    contents: FetchStatus<Entry[]>;
-  }, "id">;
+  videos: EntityTable<
+    {
+      url: string;
+      data: ArrayBuffer;
+    },
+    "url"
+  >;
+  captions: EntityTable<
+    {
+      id: number;
+      contents: FetchStatus<Entry[]>;
+    },
+    "id"
+  >;
   tabToVid: EntityTable<
     {
       id: number;

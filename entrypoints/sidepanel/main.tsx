@@ -1,12 +1,16 @@
 import {
   Badge,
-  Button, defaultTheme, Item,
-  Link, ProgressCircle,
+  Button,
+  defaultTheme,
+  Item,
+  Link,
+  ProgressCircle,
   Provider,
   TabList,
   TabPanels,
   Tabs,
-  ToastContainer, Well
+  ToastContainer,
+  Well,
 } from "@adobe/react-spectrum";
 import { Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -45,8 +49,8 @@ function KeySelect() {
     toast("Saved API key!");
   };
   return (
-      <div className="mb-4">
-        <Well>
+    <div className="mb-4">
+      <Well>
         <p className="mb-2">
           To use the AI features, you need to provide a Gemini API key from
           Google AI Studio. Follow these steps:
@@ -54,10 +58,7 @@ function KeySelect() {
         <ol className="list-decimal list-inside mb-2">
           <li>
             Go to{" "}
-            <Link
-              href="https://ai.studio/"
-              target="_blank"
-            >
+            <Link href="https://ai.studio/" target="_blank">
               https://ai.studio/
             </Link>
           </li>
@@ -71,10 +72,7 @@ function KeySelect() {
           Google servers.
         </p>
         <p className="text-sm">
-          <Link
-            href="https://ai.google.dev/gemini-api/terms"
-            target="_blank"
-          >
+          <Link href="https://ai.google.dev/gemini-api/terms" target="_blank">
             Gemini API Additional Terms of Service
           </Link>
           {" | "}
@@ -85,7 +83,7 @@ function KeySelect() {
             OHS AC Utils Privacy Policy
           </Link>
         </p>
-        </Well>
+      </Well>
       <div className="flex items-center gap-2 mt-4">
         <Icons.Key className="w-5 h-5 text-gray-500" />
         <div className="relative flex-1 flex items-center">

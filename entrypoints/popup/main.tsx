@@ -32,7 +32,10 @@ export function VideoPlayer() {
       toast.error("Video not yet loaded");
       return;
     }
-    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    const tabs = await browser.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
     const title = tabs[0]?.title?.trim() || "video";
     const filename = `${title}.mp4`;
 
@@ -42,7 +45,7 @@ export function VideoPlayer() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  }
+  };
   return (
     <div className="flex flex-col gap-4 h-full w-full">
       {state === null && (
@@ -72,10 +75,7 @@ export function VideoPlayer() {
       {state && state.status === "done" && (
         <>
           <video controls src={state.obj} className="w-full rounded-lg" />
-          <Button
-            variant="primary"
-            onPress={() => void download()}
-          >
+          <Button variant="primary" onPress={() => void download()}>
             Download Video
           </Button>
         </>

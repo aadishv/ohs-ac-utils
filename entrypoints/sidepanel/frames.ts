@@ -90,12 +90,13 @@ export default function getFetcher(
   // seek
 }
 
-
 export const parseTimeToSeconds = (timeString: string): number => {
-  const parts = timeString.split(':').map(Number);
+  const parts = timeString.split(":").map(Number);
 
   if (parts.some(isNaN)) {
-    throw new Error(`Invalid time string format: "${timeString}". Contains non-numeric parts.`);
+    throw new Error(
+      `Invalid time string format: "${timeString}". Contains non-numeric parts.`,
+    );
   }
 
   let hours = 0;
@@ -107,8 +108,10 @@ export const parseTimeToSeconds = (timeString: string): number => {
   } else if (parts.length === 2) {
     [minutes, seconds] = parts;
   } else {
-    throw new Error(`Invalid time string format: "${timeString}". Expected HH:MM:SS or MM:SS.`);
+    throw new Error(
+      `Invalid time string format: "${timeString}". Expected HH:MM:SS or MM:SS.`,
+    );
   }
 
-  return (hours * 3600) + (minutes * 60) + seconds;
+  return hours * 3600 + minutes * 60 + seconds;
 };

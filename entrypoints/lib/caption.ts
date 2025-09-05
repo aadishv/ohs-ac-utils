@@ -15,9 +15,7 @@ export function convertSecondsToHms(totalSeconds: number): string {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
 
-export async function loadCaptions(
-  req: Request
-) {
+export async function loadCaptions(req: Request) {
   if (await db.captions.get(req.tabId)) return;
   const id = req.tabId;
   const parseSpeakerText = (
@@ -66,93 +64,95 @@ export async function loadCaptions(
         : "Unknown error while fetching captions text",
   )
     .map((vtt) =>
-        Result.fromThrowable(parse)(vtt).map((parsed) => parsed.entries),
-      )
-      .andThen((v) => v)
-      .map((entries) => {
-        return entries.flatMap((e) => {
-          const { text, ...rest } = e;
-          const parsed = parseSpeakerText(text);
-          return parsed.map(({ speaker, text }) => ({
-            ...rest,
-            speaker,
-            text,
-          }));
-        });
-      })
-      .map((entries) => {
-        let newEntries: Entry[] = [];
-        let currentEntry = entries[0];
-        entries = entries.slice(1);
-        for (const entry of entries) {
-          if (entry.speaker !== currentEntry.speaker) {
-            currentEntry.id = v7();
-            newEntries.push(currentEntry);
-            currentEntry = entry;
-          } else {
-            currentEntry.text += ` ${entry.text}`;
-            currentEntry.to = entry.to;
-          }
-        }
-        newEntries.push(currentEntry);
-        return newEntries;
-      })
-    .map(async (v) =>
-      await db.captions.update(id, {
-        id,
-        contents: {
-          status: "done",
-          obj: v,
-        },
-      })
+      Result.fromThrowable(parse)(vtt).map((parsed) => parsed.entries),
     )
-    .mapErr(async (e) =>
-      await db.captions.update(id, {
-        id,
-        contents: {
-          status: "error",
-          error: e as string,
-        },
-      })
+    .andThen((v) => v)
+    .map((entries) => {
+      return entries.flatMap((e) => {
+        const { text, ...rest } = e;
+        const parsed = parseSpeakerText(text);
+        return parsed.map(({ speaker, text }) => ({
+          ...rest,
+          speaker,
+          text,
+        }));
+      });
+    })
+    .map((entries) => {
+      let newEntries: Entry[] = [];
+      let currentEntry = entries[0];
+      entries = entries.slice(1);
+      for (const entry of entries) {
+        if (entry.speaker !== currentEntry.speaker) {
+          currentEntry.id = v7();
+          newEntries.push(currentEntry);
+          currentEntry = entry;
+        } else {
+          currentEntry.text += ` ${entry.text}`;
+          currentEntry.to = entry.to;
+        }
+      }
+      newEntries.push(currentEntry);
+      return newEntries;
+    })
+    .map(
+      async (v) =>
+        await db.captions.update(id, {
+          id,
+          contents: {
+            status: "done",
+            obj: v,
+          },
+        }),
+    )
+    .mapErr(
+      async (e) =>
+        await db.captions.update(id, {
+          id,
+          contents: {
+            status: "error",
+            error: e as string,
+          },
+        }),
     );
 }
 
 export function useCaptions(): Entry[] | null {
-    const [id, setId] = useState<number | null>(null);
-    useEffect(() => {
-      void (async () => {
-        const tabs = await browser.tabs.query({
-          active: true,
-          currentWindow: true,
-        });
-        setId(tabs[0].id ?? null);
-      })();
-    }, []);
-    const result = useLiveQuery(
-      async () => {
-        if (!id) { return null;  }
-        const caps = await db.captions.where("id").equals(id).first() ?? null;
-        if (caps?.contents?.status !== "done") return null;
-        return caps.contents.obj;
-      },
-      [id],
-    );
-    useEffect(() => {
-      const interval = setInterval(async () => {
-        const tabs = await browser.tabs.query({
-          active: true,
-          currentWindow: true,
-        });
-        const newId = tabs[0].id ?? null;
-        if (!newId) return;
-        const caps = await db.captions.where("id").equals(newId).first() ?? null;
-        if (caps?.contents?.status === "done" || !result) {
-          setId(newId);
-        }
-      }, 5000);
-      return () => clearInterval(interval);
-    }, []);
-    return result ?? null;
+  const [id, setId] = useState<number | null>(null);
+  useEffect(() => {
+    void (async () => {
+      const tabs = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      setId(tabs[0].id ?? null);
+    })();
+  }, []);
+  const result = useLiveQuery(async () => {
+    if (!id) {
+      return null;
+    }
+    const caps = (await db.captions.where("id").equals(id).first()) ?? null;
+    if (caps?.contents?.status !== "done") return null;
+    return caps.contents.obj;
+  }, [id]);
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const tabs = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      const newId = tabs[0].id ?? null;
+      if (!newId) return;
+      const caps =
+        (await db.captions.where("id").equals(newId).first()) ?? null;
+      if (caps?.contents?.status === "done" || !result) {
+        setId(newId);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+  return result ?? null;
 }
 export async function getCaptions(): Promise<Entry[] | null> {
   const tabs = await browser.tabs.query({
@@ -160,8 +160,10 @@ export async function getCaptions(): Promise<Entry[] | null> {
     currentWindow: true,
   });
   const id = tabs[0].id ?? null;
-  if (!id) { return null;  }
-  const caps = await db.captions.where("id").equals(id).first() ?? null;
+  if (!id) {
+    return null;
+  }
+  const caps = (await db.captions.where("id").equals(id).first()) ?? null;
   if (caps?.contents?.status !== "done") return null;
   return caps.contents.obj;
 }

@@ -119,28 +119,26 @@ export function useVideo(): FetchStatus<string> {
       setId(tabs[0].id ?? null);
     })();
   }, []);
-  const result = useLiveQuery(
-    async () => {
-      cleanupObjectUrl();
-      if (!id) {
-        return {
-          status: "working" as const,
-          progress: -1,
-        };
-      }
-      const video = await db.tabToVid.where("id").equals(id).first() ?? null;
-      if (video?.value?.status !== "done") return video?.value;
-      const buffer = await db.videos.where("url").equals(video.value.obj).first();
-      if (!buffer) return {
+  const result = useLiveQuery(async () => {
+    cleanupObjectUrl();
+    if (!id) {
+      return {
+        status: "working" as const,
+        progress: -1,
+      };
+    }
+    const video = (await db.tabToVid.where("id").equals(id).first()) ?? null;
+    if (video?.value?.status !== "done") return video?.value;
+    const buffer = await db.videos.where("url").equals(video.value.obj).first();
+    if (!buffer)
+      return {
         status: "error" as const,
         error: "No video data found",
       };
-      const blob = new Blob([buffer.data], { type: "video/mp4" });
-      const newUrl = URL.createObjectURL(blob);
-      url.current = newUrl;
-      return { status: "done" as const, obj: newUrl };
-    },
-    [id],
-  );
+    const blob = new Blob([buffer.data], { type: "video/mp4" });
+    const newUrl = URL.createObjectURL(blob);
+    url.current = newUrl;
+    return { status: "done" as const, obj: newUrl };
+  }, [id]);
   return result ?? null;
-};
+}
