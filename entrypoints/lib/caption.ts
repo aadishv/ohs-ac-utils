@@ -139,3 +139,14 @@ export function useCaptions(): Entry[] | null {
     );
     return result ?? null;
 }
+export async function getCaptions(): Promise<Entry[] | null> {
+  const tabs = await browser.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
+  const id = tabs[0].id ?? null;
+  if (!id) { return null;  }
+  const caps = await db.captions.where("id").equals(id).first() ?? null;
+  if (caps?.contents?.status !== "done") return null;
+  return caps.contents.obj;
+}

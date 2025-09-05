@@ -1,3 +1,4 @@
+import { UIMessage } from "ai";
 import Dexie, { type EntityTable } from "dexie";
 
 export type FetchStatus<T> =

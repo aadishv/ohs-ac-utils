@@ -29,7 +29,7 @@ export function VideoPlayer() {
     });
   };
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="flex flex-col gap-4 h-full w-full">
       {state === null && (
         <>
           <span className="opacity-70">
@@ -72,11 +72,11 @@ export function VideoPlayer() {
   );
 }
 
-const rootElement = document.getElementsByTagName("body")[0];
+const rootElement = document.getElementById("root");
 if (rootElement) {
   createRoot(rootElement).render(
-    <Provider theme={defaultTheme}>
-      <div className="p-4">
+    <Provider theme={defaultTheme} UNSAFE_style={{width: "100%", height: "100%", minWidth: "320px"}}>
+      <div className="p-4 size-full">
         <VideoPlayer />
       </div>
     </Provider>,

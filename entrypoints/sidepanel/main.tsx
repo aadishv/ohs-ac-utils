@@ -17,10 +17,7 @@ import {
 import { Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../tailwind.css";
-import {
-  convertSecondsToHms,
-  useCaptions,
-} from "../lib/caption";
+import { convertSecondsToHms, useCaptions } from "../lib/caption";
 import { useSelector } from "@xstate/store/react";
 import * as Icons from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -32,7 +29,7 @@ function Transcript() {
   return vtt === null ? (
     <ProgressCircle isIndeterminate />
   ) : (
-    <div>
+    <div className="overflow-y-scroll">
       {vtt.map((entry) => (
         <div key={entry.id} className="flex flex-col">
           <div className="flex">
@@ -91,21 +88,30 @@ function KeySelect() {
 function App() {
   const chat = useLocalChat();
   return (
-    <div className="h-full">
+    <div className="h-full ">
       <Tabs
         aria-label="Choose which mode to use the AI side panel in"
-        UNSAFE_style={{ height: "100vh", padding: "1rem" }}
+        UNSAFE_className="overflow-y-scroll"
       >
-        <TabList UNSAFE_className="mb-4">
+        <TabList
+          UNSAFE_className="z-[50] w-[96vw]"
+          UNSAFE_style={{
+            backgroundColor: "var(--spectrum-alias-background-color-default)",
+          }}
+        >
           <Item key="ai">AI</Item>
           <Item key="tc">Transcript</Item>
+          <Item key="ak">API key</Item>
         </TabList>
-        <TabPanels UNSAFE_style={{ height: "100%" }}>
+        <TabPanels UNSAFE_className="w-[96%] h-[96%] pt-14 fixed overflow-y-scroll">
           <Item key="tc">
             <Transcript />
           </Item>
           <Item key="ai">
             <Chat {...chat} />
+          </Item>
+          <Item key="ak">
+            <KeySelect />
           </Item>
         </TabPanels>
       </Tabs>
@@ -117,12 +123,14 @@ const rootElement = document.getElementById("root");
 if (rootElement) {
   createRoot(rootElement).render(
     <Provider
-      UNSAFE_className="w-[100vw] h-[100vh] fixed overflow-y-scroll"
+      UNSAFE_className="w-screen h-screen fixed overflow-y-scroll"
       theme={defaultTheme}
     >
       <ToastContainer />
       <Suspense>
-        <App />
+        <div className="w-[96vw] h-[96vh] mx-[2vw] my-[2vh]">
+          <App />
+        </div>
         <Toaster />
       </Suspense>
     </Provider>,

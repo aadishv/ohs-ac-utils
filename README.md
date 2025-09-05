@@ -1,6 +1,6 @@
 # remaining stuff to get AI working
 
-- [ ] indexedDB persistence for chats? -- also port all current indexedDB stuff to Dexie
+- [X] also port all current indexedDB stuff to Dexie
 - [X] indexedDB/localStorage caching...? at least have the fetcher hit a per-session cache perhaps
 - [X] tool for frame fetching (option to show to user)
 - [ ] update system prompt with tools
