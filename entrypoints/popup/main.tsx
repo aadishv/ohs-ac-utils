@@ -13,6 +13,7 @@ import {
 } from "@adobe/react-spectrum";
 import { useVideo } from "../lib/video";
 import "../tailwind.css";
+import { toast, Toaster } from "sonner";
 
 export function VideoPlayer() {
   const state = useVideo();
@@ -26,6 +27,22 @@ export function VideoPlayer() {
         .catch((err) => console.error(err));
     });
   };
+  const download = async () => {
+    if (state?.status !== "done") {
+      toast.error("Video not yet loaded");
+      return;
+    }
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    const title = tabs[0]?.title?.trim() || "video";
+    const filename = `${title}.mp4`;
+
+    const a = document.createElement("a");
+    a.href = state.obj;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
   return (
     <div className="flex flex-col gap-4 h-full w-full">
       {state === null && (
@@ -53,13 +70,11 @@ export function VideoPlayer() {
         </InlineAlert>
       )}
       {state && state.status === "done" && (
-        // TODO: reimplement
-        // see https://stackoverflow.com/questions/72474057/how-to-use-url-createobjecturl-inside-a-manifest-v3-extension-serviceworker
         <>
           <video controls src={state.obj} className="w-full rounded-lg" />
           <Button
             variant="primary"
-            // onPress={() => downloadBlobFromUrl(state.url)}
+            onPress={() => void download()}
           >
             Download Video
           </Button>
@@ -83,6 +98,7 @@ if (rootElement) {
     >
       <div className="p-4 size-full">
         <VideoPlayer />
+        <Toaster />
       </div>
     </Provider>,
   );

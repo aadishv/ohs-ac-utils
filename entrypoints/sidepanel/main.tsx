@@ -14,7 +14,8 @@ import "../tailwind.css";
 import { convertSecondsToHms, useCaptions } from "../lib/caption";
 import * as Icons from "lucide-react";
 import { Toaster, toast } from "sonner";
-import Chat, { useLocalChat, key } from "./ai2";
+import { useLocalChat, key } from "./ai2";
+import Chat from "./chat";
 function Transcript() {
   const vtt = useCaptions();
   return vtt === null ? (
